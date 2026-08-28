@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "SkillsManager",
+  "outputfilename": "SkillsManager",
+  "frontend:install": "pnpm install",
+  "frontend:build": "pnpm run build",
+  "frontend:dev:watcher": "pnpm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "homchen",
+    "email": "114279870+Homchen@users.noreply.github.com"
+  },
+  "info": {
+    "productName": "SkillsManager",
+    "productVersion": "1.0.0",
+    "companyName": "homchen",
+    "copyright": "Copyright © 2026 homchen"
+  }
+}

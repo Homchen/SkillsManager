@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "agents": [
+    {
+      "id": "cursor",
+      "displayName": "Cursor Hooks",
+      "defaultSelected": true,
+      "requires": [
+        "node"
+      ],
+      "target": {
+        "hooksJson": ".cursor/hooks.json",
+        "managedDir": ".cursor/hooks/skillsmanager/cursor"
+      },
+      "files": [
+        "record-skill-read.cjs"
+      ],
+      "hooks": {
+        "preToolUse": [
+          {
+            "command": "node \"hooks/skillsmanager/cursor/record-skill-read.cjs\"",
+            "matcher": "Read",
+            "timeout": 5
+          }
+        ],
+        "beforeReadFile": [
+          {
+            "command": "node \"hooks/skillsmanager/cursor/record-skill-read.cjs\"",
+            "timeout": 5
+          }
+        ],
+        "beforeSubmitPrompt": [
+          {
+            "command": "node \"hooks/skillsmanager/cursor/record-skill-read.cjs\"",
+            "matcher": "UserPromptSubmit",
+            "timeout": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "claude",
+      "displayName": "Claude Code Hooks",
+      "defaultSelected": true,
+      "requires": [
+        "node"
+      ],
+      "target": {
+        "type": "claude-settings",
+        "settingsJson": ".claude/settings.json",
+        "managedDir": ".claude/hooks/skillsmanager/claude"
+      },
+      "files": [
+        "record-skill-read.cjs"
+      ],
+      "hooks": {
+        "PreToolUse": [
+          {
+            "matcher": "Read|Skill",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "node \"{{managedDir}}/record-skill-read.cjs\"",
+                "timeout": 5
+              }
+            ]
+          }
+        ],
+        "UserPromptExpansion": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "node \"{{managedDir}}/record-skill-read.cjs\"",
+                "timeout": 5
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "opencode",
+      "displayName": "OpenCode Plugin Hooks",
+      "target": {
+        "type": "opencode-plugin",
+        "pluginFile": ".config/opencode/plugins/skillsmanager-opencode.js"
+      },
+      "files": [
+        "skillsmanager-opencode.js"
+      ]
+    },
+    {
+      "id": "codex",
+      "displayName": "Codex Hooks",
+      "defaultSelected": true,
+      "requires": [
+        "node"
+      ],
+      "target": {
+        "type": "codex-hooks-json",
+        "hooksJson": ".codex/hooks.json",
+        "managedDir": ".codex/hooks/skillsmanager/codex"
+      },
+      "files": [
+        "record-skill-read.cjs"
+      ],
+      "hooks": {
+        "PreToolUse": [
+          {
+            "matcher": "Read|Skill|Bash|shell_command|mcp__.*read.*",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "node \"{{managedDir}}/record-skill-read.cjs\"",
+                "timeout": 5,
+                "statusMessage": "Recording Codex skill usage"
+              }
+            ]
+          }
+        ],
+        "UserPromptSubmit": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "node \"{{managedDir}}/record-skill-read.cjs\"",
+                "timeout": 5
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

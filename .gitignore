@@ -1,0 +1,101 @@
+# SkillsManager gitignore
+# Intentionally tracked (do not ignore):
+#   frontend/.env.development, frontend/.env.production
+#   frontend/wailsjs/, frontend/pnpm-lock.yaml, go.sum
+#   build/appicon.png, build/windows/, build/darwin/, build/README.md
+
+# --- Wails / packaging ---
+build/bin/
+frontend/dist/
+*.syso
+frontend/package.json.md5
+third_party/git/
+
+# --- Go ---
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
+coverage.*
+*.coverprofile
+profile.cov
+vendor/
+go.work
+go.work.sum
+
+# --- Node / Vite / pnpm ---
+node_modules/
+.pnpm-store/
+.vite/
+.cache/
+coverage/
+*.lcov
+*.tsbuildinfo
+.eslintcache
+.npm
+*.tgz
+pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Secrets / credentials / code signing ---
+# Do not use `.env.*` here: Vite flags in frontend/.env.{development,production} are source.
+.env
+.env.local
+.env.*.local
+*.pem
+*.p12
+*.pfx
+*.key
+*.jks
+*.keystore
+/.skillsmanager/
+
+# --- Tests / logs / debug ---
+logs/
+*.log
+*.tmp
+*.temp
+*.stackdump
+*.dmp
+__debug_bin*
+*.orig
+*~
+*.swp
+*.swo
+
+# --- Local tooling (not published) ---
+.superpowers/
+.codegraph/
+.worktrees/
+.omo/
+.scratch/
+.brooks-lint-history.json
+.claude/
+.codex/
+.cursor/
+
+# --- Local agent docs (not published) ---
+/AGENTS.md
+/CONTEXT.md
+/hooks/AGENTS.md
+/docs/agents/
+/docs/superpowers/
+
+# --- OS / IDE ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.idea/
+.vscode/
+*.vsix
+*.code-workspace
