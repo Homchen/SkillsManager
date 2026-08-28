@@ -37,7 +37,16 @@ jobs:
           platform: x64
 
       - name: Install NSIS
-        run: choco install nsis -y
+        run: |
+          choco install nsis -y
+          $nsisDir = @(
+            "${env:ProgramFiles(x86)}\NSIS",
+            "$env:ProgramFiles\NSIS"
+          ) | Where-Object { Test-Path (Join-Path $_ "makensis.exe") } | Select-Object -First 1
+          if (-not $nsisDir) {
+            throw "makensis.exe not found after installing NSIS"
+          }
+          echo $nsisDir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       - name: Install frontend deps
         working-directory: frontend
@@ -47,12 +56,19 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
 
       - name: Build Windows installer
-        run: wails build -nsis
+        run: |
+          Get-Command makensis -ErrorAction Stop | Format-List
+          wails build -nsis
+          $installer = Get-ChildItem -Path build/bin -Filter "*-installer.exe"
+          if (-not $installer) {
+            throw "NSIS installer was not created in build/bin (Wails warns instead of failing when makensis is missing)"
+          }
+          Get-ChildItem -Path build/bin -Filter "*.exe" | Format-Table Name, Length
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            build/bin/*.exe
+            build/bin/*-installer.exe
           generate_release_notes: true
           fail_on_unmatched_files: true
