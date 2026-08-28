@@ -1811,13 +1811,6 @@ export default function SkillsPage({
                 <button type="button" onClick={() => void openSkillInFolder(skill)}>
                   打开
                 </button>
-                <button
-                  type="button"
-                  disabled={exporting}
-                  onClick={() => exportOneSkill(skill)}
-                >
-                  {exporting ? '导出中…' : '导出'}
-                </button>
                 <button type="button" onClick={() => openEnableDialog(skill)}>
                   启用
                 </button>
@@ -1826,6 +1819,13 @@ export default function SkillsPage({
                 </button>
                 <button type="button" onClick={() => openAssignGroup(skill)}>
                   分组
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting}
+                  onClick={() => exportOneSkill(skill)}
+                >
+                  {exporting ? '导出中…' : '导出'}
                 </button>
                 <button
                   type="button"
