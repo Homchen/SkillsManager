@@ -37,6 +37,8 @@ export function EnableSkillLinks(arg1:Array<string>,arg2:string):Promise<domain.
 
 export function ExecuteOrganize():Promise<domain.OrganizeReport>;
 
+export function ExportSkills(arg1:Array<string>):Promise<domain.ExportToolSkillsResult>;
+
 export function ExportToolSkills(arg1:string):Promise<domain.ExportToolSkillsResult>;
 
 export function GetConfig():Promise<config.Config>;

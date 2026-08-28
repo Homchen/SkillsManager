@@ -87,6 +87,12 @@ func (a *App) ExportToolSkills(toolID string) (domain.ExportToolSkillsResult, er
 	}, "toolId", toolID)
 }
 
+func (a *App) ExportSkills(ids []string) (domain.ExportToolSkillsResult, error) {
+	return applog.OpValue("ExportSkills", func() (domain.ExportToolSkillsResult, error) {
+		return a.inner.ExportSkills(ids)
+	}, "count", len(ids))
+}
+
 func (a *App) RevealInFolder(path string) error {
 	return applog.Op("RevealInFolder", func() error {
 		return a.inner.RevealInFolder(path)

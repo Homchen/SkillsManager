@@ -123,6 +123,10 @@ func isZipSkillPackage(path string) bool {
 }
 
 func candidatesFromZip(zipPath string) ([]candidate, func(), error) {
+	return candidatesFromZipDepth(zipPath, 0)
+}
+
+func candidatesFromZipDepth(zipPath string, depth int) ([]candidate, func(), error) {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("无法打开压缩包: %w", err)
@@ -130,10 +134,14 @@ func candidatesFromZip(zipPath string) ([]candidate, func(), error) {
 	defer zr.Close()
 
 	ids := topLevelSkillIDs(&zr.Reader)
-	if len(ids) == 0 {
+	var nested []string
+	if depth == 0 {
+		nested = topLevelNestedArchives(&zr.Reader)
+	}
+	if len(ids) == 0 && len(nested) == 0 {
 		return nil, nil, nil
 	}
-	if len(ids) > maxZipSkills {
+	if len(ids)+len(nested) > maxZipSkills {
 		return nil, nil, fmt.Errorf("zip 内 skill 过多（>%d）", maxZipSkills)
 	}
 
@@ -153,7 +161,87 @@ func candidatesFromZip(zipPath string) ([]candidate, func(), error) {
 		}
 		out = append(out, candidate{id: id, src: dest})
 	}
+	for _, name := range nested {
+		innerPath := filepath.Join(tmp, "_nested", filepath.Base(name))
+		if err := extractNamedZipFile(&zr.Reader, name, innerPath, &totalBytes); err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("解压 %s 失败: %w", name, err)
+		}
+		inner, innerCleanup, err := candidatesFromZipDepth(innerPath, depth+1)
+		if err != nil {
+			if innerCleanup != nil {
+				innerCleanup()
+			}
+			cleanup()
+			return nil, nil, err
+		}
+		if innerCleanup != nil {
+			prev := cleanup
+			cleanup = func() {
+				innerCleanup()
+				prev()
+			}
+		}
+		out = append(out, inner...)
+		if len(out) > maxZipSkills {
+			cleanup()
+			return nil, nil, fmt.Errorf("zip 内 skill 过多（>%d）", maxZipSkills)
+		}
+	}
 	return out, cleanup, nil
+}
+
+func topLevelNestedArchives(zr *zip.Reader) []string {
+	seen := map[string]struct{}{}
+	var names []string
+	for _, f := range zr.File {
+		name := filepath.ToSlash(f.Name)
+		name = strings.TrimPrefix(name, "./")
+		if name == "" || strings.Contains(name, "..") || strings.Contains(name, "/") {
+			continue
+		}
+		if f.FileInfo().IsDir() || strings.HasSuffix(name, "/") {
+			continue
+		}
+		if !isZipSkillPackage(name) {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
+}
+
+func extractNamedZipFile(zr *zip.Reader, name, dest string, totalBytes *int64) error {
+	for _, f := range zr.File {
+		entry := filepath.ToSlash(f.Name)
+		entry = strings.TrimPrefix(entry, "./")
+		if entry != name {
+			continue
+		}
+		if f.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("zip 含符号链接，已拒绝: %s", f.Name)
+		}
+		if f.UncompressedSize64 > maxZipFileBytes {
+			return fmt.Errorf("文件过大（>%d bytes）: %s", maxZipFileBytes, f.Name)
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return err
+		}
+		n, err := writeZipFile(f, dest)
+		if err != nil {
+			return err
+		}
+		*totalBytes += n
+		if *totalBytes > maxZipTotalBytes {
+			return fmt.Errorf("zip 解压总量过大（>%d bytes）", maxZipTotalBytes)
+		}
+		return nil
+	}
+	return fmt.Errorf("zip 内缺少 %s", name)
 }
 
 func topLevelSkillIDs(zr *zip.Reader) []string {

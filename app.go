@@ -23,6 +23,7 @@ import (
 	"SkillsManager/internal/linker"
 	"SkillsManager/internal/organizer"
 	"SkillsManager/internal/priv"
+	"SkillsManager/internal/reveal"
 	"SkillsManager/internal/scanner"
 	"SkillsManager/internal/skilli18n"
 	skillimport "SkillsManager/internal/skillimport"
@@ -434,6 +435,23 @@ func (a *appCore) ExportToolSkills(toolID string) (domain.ExportToolSkillsResult
 	return res, userErr(err)
 }
 
+// ExportSkills zips hub sources for the given skill IDs.
+// One skill becomes <id>.zip; two or more become skill-export-YYYYMMDD.zip
+// containing one <id>.zip per skill.
+func (a *appCore) ExportSkills(ids []string) (domain.ExportToolSkillsResult, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return domain.ExportToolSkillsResult{}, userErr(err)
+	}
+	exportDir := filepath.Join(home, ".skillsmanager", "export")
+	entries, err := a.listMerged()
+	if err != nil {
+		return domain.ExportToolSkillsResult{}, userErr(err)
+	}
+	res, err := skellexport.ExportSelected(a.cfg.HubPath, exportDir, ids, entries, time.Now())
+	return res, userErr(err)
+}
+
 // RevealInFolder opens the file manager and selects path when supported.
 func (a *appCore) RevealInFolder(path string) error {
 	path = strings.TrimSpace(path)
@@ -448,17 +466,8 @@ func (a *appCore) RevealInFolder(path string) error {
 	if _, err := os.Stat(abs); err != nil {
 		return userErr(fmt.Errorf("无法定位文件: %w", err))
 	}
-	var cmd *exec.Cmd
-	switch goruntime.GOOS {
-	case "windows":
-		cmd = exec.Command("explorer", "/select,"+abs)
-	case "darwin":
-		cmd = exec.Command("open", "-R", abs)
-	default:
-		cmd = exec.Command("xdg-open", filepath.Dir(abs))
-	}
-	if err := cmd.Start(); err != nil {
-		return userErr(fmt.Errorf("打开所在位置失败: %w", err))
+	if err := reveal.Open(abs); err != nil {
+		return userErr(err)
 	}
 	return nil
 }

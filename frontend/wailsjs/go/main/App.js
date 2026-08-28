@@ -70,6 +70,10 @@ export function ExecuteOrganize() {
   return window['go']['main']['App']['ExecuteOrganize']();
 }
 
+export function ExportSkills(arg1) {
+  return window['go']['main']['App']['ExportSkills'](arg1);
+}
+
 export function ExportToolSkills(arg1) {
   return window['go']['main']['App']['ExportToolSkills'](arg1);
 }

@@ -6,6 +6,7 @@ import {
   DeleteSkill,
   DisableAllSkillLinks,
   EnableSkillLinks,
+  ExportSkills,
   GetConfig,
   GetLinkSnapshot,
   GetSkillUsageSummary,
@@ -18,6 +19,7 @@ import {
   PurgeTrash,
   RenameGroup,
   RenameSkill,
+  RevealInFolder,
   RestoreTrash,
   SetCollapsedSkillGroups,
   SetSkillsLayout,
@@ -262,6 +264,7 @@ export default function SkillsPage({
   const [batchEnableTools, setBatchEnableTools] = useState<Set<string>>(new Set())
   const [batchEnabling, setBatchEnabling] = useState(false)
   const [batchEnableError, setBatchEnableError] = useState('')
+  const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
   /** 外部文件拖入页面期间（尚未松开） */
   const [fileDragOver, setFileDragOver] = useState(false)
@@ -583,7 +586,8 @@ export default function SkillsPage({
         assignOpen ||
         assigning ||
         confirmDialog ||
-        confirmBusy
+        confirmBusy ||
+        exporting
       ) {
         return
       }
@@ -599,6 +603,7 @@ export default function SkillsPage({
     assigning,
     confirmDialog,
     confirmBusy,
+    exporting,
     exitSelectMode,
   ])
 
@@ -1092,6 +1097,48 @@ export default function SkillsPage({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
+  }
+
+  async function exportSkillIds(ids: string[]) {
+    const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))]
+    if (unique.length === 0) return
+    setExporting(true)
+    setError('')
+    setOpenMenuId(null)
+    try {
+      const res = await ExportSkills(unique)
+      const skip = res.skipped > 0 ? `（跳过 ${res.skipped}）` : ''
+      showToast({message: `已导出 ${res.exported} 个 skill${skip}`, tone: 'success'})
+      try {
+        await RevealInFolder(res.zipPath)
+      } catch (e) {
+        showToast({
+          message: `已导出 ${res.exported} 个 skill → ${res.zipPath}${skip}；无法打开所在位置：${
+            e instanceof Error ? e.message : String(e)
+          }`,
+          tone: 'warn',
+        })
+      }
+      if (selectMode) exitSelectMode()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  function exportOneSkill(skill: SkillEntry) {
+    if (!skill.hubPath?.trim()) {
+      setOpenMenuId(null)
+      setError('无法导出：该技能在源仓中无路径')
+      return
+    }
+    void exportSkillIds([skill.id])
+  }
+
+  function exportSelectedSkills() {
+    if (selectedIds.size === 0) return
+    void exportSkillIds([...selectedIds])
   }
 
   function closeEnableDialog() {
@@ -1763,6 +1810,13 @@ export default function SkillsPage({
               <div className="card-menu">
                 <button type="button" onClick={() => void openSkillInFolder(skill)}>
                   打开
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting}
+                  onClick={() => exportOneSkill(skill)}
+                >
+                  {exporting ? '导出中…' : '导出'}
                 </button>
                 <button type="button" onClick={() => openEnableDialog(skill)}>
                   启用
@@ -3005,7 +3059,7 @@ export default function SkillsPage({
           <button
             type="button"
             className="btn btn-ghost"
-            disabled={batchEnabling || assigning || confirmBusy || filtered.length === 0}
+            disabled={batchEnabling || assigning || confirmBusy || exporting || filtered.length === 0}
             onClick={toggleSelectAllFiltered}
           >
             {filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id))
@@ -3016,7 +3070,7 @@ export default function SkillsPage({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={batchEnabling || assigning || confirmBusy || selectedIds.size === 0}
+            disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
             onClick={openBatchEnableDialog}
           >
             启用
@@ -3024,15 +3078,23 @@ export default function SkillsPage({
           <button
             type="button"
             className="btn"
-            disabled={batchEnabling || assigning || confirmBusy || selectedIds.size === 0}
+            disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
             onClick={openBatchAssignGroup}
           >
             分组
           </button>
           <button
             type="button"
+            className="btn"
+            disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
+            onClick={exportSelectedSkills}
+          >
+            {exporting ? '导出中…' : '导出'}
+          </button>
+          <button
+            type="button"
             className="btn btn-danger"
-            disabled={batchEnabling || assigning || confirmBusy || selectedIds.size === 0}
+            disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
             onClick={openBatchDeleteDialog}
           >
             {confirmBusy && confirmDialog?.kind === 'delete-skills-batch'
@@ -3042,7 +3104,7 @@ export default function SkillsPage({
           <button
             type="button"
             className="btn"
-            disabled={batchEnabling || assigning || confirmBusy}
+            disabled={batchEnabling || assigning || confirmBusy || exporting}
             onClick={exitSelectMode}
           >
             取消

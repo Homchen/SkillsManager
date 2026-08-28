@@ -124,6 +124,52 @@ func TestImportZip(t *testing.T) {
 	}
 }
 
+func TestImportZipOfSkillZips(t *testing.T) {
+	hub := t.TempDir()
+	dir := t.TempDir()
+	innerA := filepath.Join(dir, "skill-a.zip")
+	innerB := filepath.Join(dir, "skill-b.zip")
+	if err := writeTestZip(innerA, map[string]string{
+		"skill-a/SKILL.md": "---\nname: A\n---\n",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTestZip(innerB, map[string]string{
+		"skill-b/SKILL.md": "---\nname: B\n---\n",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	aBytes, err := os.ReadFile(innerA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bBytes, err := os.ReadFile(innerB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pack := filepath.Join(dir, "skill-export-20260828.zip")
+	if err := writeTestZipBytes(pack, map[string][]byte{
+		"skill-a.zip": aBytes,
+		"skill-b.zip": bBytes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Import(hub, []string{pack})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Imported != 2 {
+		t.Fatalf("imported=%d items=%+v", res.Imported, res.Items)
+	}
+	if !fsutil.IsSkillDir(filepath.Join(hub, domain.DefaultGroup, "skill-a")) {
+		t.Fatal("missing skill-a")
+	}
+	if !fsutil.IsSkillDir(filepath.Join(hub, domain.DefaultGroup, "skill-b")) {
+		t.Fatal("missing skill-b")
+	}
+}
+
 func TestImportSkillPackage(t *testing.T) {
 	hub := t.TempDir()
 	skillPath := filepath.Join(t.TempDir(), "c4-codebase-architecture.skill")
@@ -189,6 +235,14 @@ func TestImportZipRejectsOversizedFile(t *testing.T) {
 }
 
 func writeTestZip(path string, files map[string]string) error {
+	bin := make(map[string][]byte, len(files))
+	for name, body := range files {
+		bin[name] = []byte(body)
+	}
+	return writeTestZipBytes(path, bin)
+}
+
+func writeTestZipBytes(path string, files map[string][]byte) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -201,7 +255,7 @@ func writeTestZip(path string, files map[string]string) error {
 			_ = zw.Close()
 			return err
 		}
-		if _, err := w.Write([]byte(body)); err != nil {
+		if _, err := w.Write(body); err != nil {
 			_ = zw.Close()
 			return err
 		}
