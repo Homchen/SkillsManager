@@ -52,6 +52,7 @@ export namespace config {
 	    openAIModel?: string;
 	    openAITemperature: number;
 	    logDebug?: boolean;
+	    onboardingCompleted: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -76,6 +77,7 @@ export namespace config {
 	        this.openAIModel = source["openAIModel"];
 	        this.openAITemperature = source["openAITemperature"];
 	        this.logDebug = source["logDebug"];
+	        this.onboardingCompleted = source["onboardingCompleted"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

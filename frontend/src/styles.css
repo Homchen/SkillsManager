@@ -4012,3 +4012,158 @@ body.is-marquee-selecting * {
     align-items: flex-start;
   }
 }
+
+/* —— 新手引导 —— */
+.onboarding-root {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  pointer-events: none;
+}
+
+/* Stacking inside .onboarding-root:
+ * 1 catcher(has-spot) + demo  — demo must stay here so the spot hole can cut into it
+ * 2 spot (box-shadow mask)
+ * 4 hit
+ * 5 card
+ */
+.onboarding-catcher {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: rgba(15, 23, 42, 0.55);
+  pointer-events: auto;
+}
+
+.onboarding-catcher.has-spot {
+  z-index: 1;
+  background: transparent;
+}
+
+.onboarding-spot {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55);
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.onboarding-hit {
+  position: fixed;
+  z-index: 4;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.onboarding-hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.onboarding-demo {
+  position: fixed;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+}
+
+.onboarding-demo-organize {
+  top: var(--nav-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 16px;
+  overflow: auto;
+  background: var(--bg);
+}
+
+/* Stay inside the demo stacking context so the spotlight hole can cut into 「关闭」. */
+.onboarding-demo-organize .dialog-backdrop {
+  z-index: 0;
+}
+
+.onboarding-demo-bulk {
+  inset: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 16px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.onboarding-demo-grouped {
+  top: var(--nav-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 16px;
+  overflow: auto;
+  background: var(--bg);
+  scrollbar-gutter: stable;
+}
+
+.onboarding-card {
+  position: fixed;
+  z-index: 5;
+  width: min(320px, calc(100vw - 24px));
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+  pointer-events: auto;
+}
+
+.onboarding-kicker {
+  margin: 0 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.onboarding-card h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+.onboarding-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.onboarding-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.onboarding-skip {
+  margin-right: auto;
+}
+
+.onboarding-replay-btn {
+  margin-top: 8px;
+}
+

@@ -5,8 +5,15 @@ import EditorPage, {type EditorPageHandle} from './pages/EditorPage'
 import OrganizePage from './pages/OrganizePage'
 import SettingsPage, {type SettingsPageHandle} from './pages/SettingsPage'
 import UsagePage from './pages/UsagePage'
-import {CancelSkillTranslation, GetConfigLoadError} from '../wailsjs/go/main/App'
+import OnboardingOverlay from './components/OnboardingOverlay'
+import {
+  CancelSkillTranslation,
+  CompleteOnboarding,
+  GetConfigLoadError,
+  ShouldShowOnboarding,
+} from '../wailsjs/go/main/App'
 import {EventsOn} from '../wailsjs/runtime/runtime'
+import {logClientWarn} from './lib/clientLog'
 
 const NAV: {id: AppView; label: string}[] = [
   {id: 'skills', label: '技能'},
@@ -21,6 +28,8 @@ function App() {
   const [skillsReloadToken, setSkillsReloadToken] = useState(0)
   const [translationTask, setTranslationTask] = useState<TranslationTask | null>(null)
   const [configLoadError, setConfigLoadError] = useState('')
+  const [tourOpen, setTourOpen] = useState(false)
+  const [tourNonce, setTourNonce] = useState(0)
   const settingsRef = useRef<SettingsPageHandle>(null)
   const editorRef = useRef<EditorPageHandle>(null)
   const mainRef = useRef<HTMLElement>(null)
@@ -127,6 +136,7 @@ function App() {
   }, [translationTask])
 
   async function goTo(next: AppView) {
+    if (tourOpen) return
     if (next === view) return
     if (view === 'settings') {
       const ok = (await settingsRef.current?.tryLeave()) ?? true
@@ -209,6 +219,37 @@ function App() {
     void goTo('skills')
   }
 
+  function openTour() {
+    setTourNonce((n) => n + 1)
+    setTourOpen(true)
+  }
+
+  async function replayOnboarding() {
+    if (view === 'settings') {
+      const ok = (await settingsRef.current?.tryLeave()) ?? true
+      if (!ok) return
+    }
+    if (view === 'editor') {
+      const ok = (await editorRef.current?.tryLeave()) ?? true
+      if (!ok) return
+    }
+    setView('skills')
+    openTour()
+  }
+
+  function finishOnboarding() {
+    setTourOpen(false)
+    void CompleteOnboarding().catch((e) => {
+      logClientWarn('complete onboarding failed', e instanceof Error ? e.message : String(e))
+    })
+  }
+
+  useEffect(() => {
+    void ShouldShowOnboarding().then((show) => {
+      if (show) openTour()
+    })
+  }, [])
+
   useEffect(() => {
     void GetConfigLoadError().then((msg) => {
       if (msg) setConfigLoadError(msg)
@@ -290,11 +331,16 @@ function App() {
             translationTask={translationTask}
           />
         ) : null}
-        {view === 'settings' ? <SettingsPage ref={settingsRef} /> : null}
+        {view === 'settings' ? (
+          <SettingsPage ref={settingsRef} onReplayOnboarding={() => void replayOnboarding()} />
+        ) : null}
         {view === 'usage' ? (
           <UsagePage onOpenEditor={openEditor} active={view === 'usage'} />
         ) : null}
       </main>
+      {tourOpen ? (
+        <OnboardingOverlay key={tourNonce} onFinish={finishOnboarding} />
+      ) : null}
     </div>
   )
 }

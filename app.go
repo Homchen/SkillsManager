@@ -203,6 +203,24 @@ func (a *appCore) SetCollapsedSkillGroups(ids []string) error {
 	return userErr(a.persistSettings())
 }
 
+// ShouldShowOnboarding is true only for a fresh install that has not finished the tour.
+func (a *appCore) ShouldShowOnboarding() bool {
+	return !a.cfg.OnboardingCompleted
+}
+
+// CompleteOnboarding records that the first-run tour was skipped or finished.
+func (a *appCore) CompleteOnboarding() error {
+	if a.cfg.OnboardingCompleted {
+		return nil
+	}
+	a.cfg.OnboardingCompleted = true
+	if err := a.persistSettings(); err != nil {
+		a.cfg.OnboardingCompleted = false
+		return userErr(err)
+	}
+	return nil
+}
+
 // SetSkillsLayout updates only the skills page layout without rewriting other settings.
 func (a *appCore) SetSkillsLayout(layout string) error {
 	layout = strings.TrimSpace(layout)
@@ -252,6 +270,9 @@ func (a *appCore) SaveConfig(cfg config.Config) error {
 			return userErr(err)
 		}
 	}
+
+	// Settings UI does not send this field; keep the in-memory tour flag.
+	cfg.OnboardingCompleted = a.cfg.OnboardingCompleted
 
 	if err := config.EnsureHubDir(cfg.HubPath); err != nil {
 		return userErr(fmt.Errorf("创建源仓目录失败: %w", err))

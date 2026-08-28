@@ -45,6 +45,10 @@ const TRANSLATION_ENGINES = [
   {value: 'openai_compatible', label: 'AI 翻译（OpenAI 兼容）'},
 ]
 
+type Props = {
+  onReplayOnboarding?: () => void
+}
+
 export type SettingsPageHandle = {
   /** 若有未保存改动则提示；返回 true 表示可以离开 */
   tryLeave: () => Promise<boolean>
@@ -88,7 +92,10 @@ function configSnapshot(cfg: AppConfig): string {
   })
 }
 
-const SettingsPage = forwardRef<SettingsPageHandle>(function SettingsPage(_props, ref) {
+const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage(
+  {onReplayOnboarding},
+  ref,
+) {
   const [cfg, setCfg] = useState<AppConfig | null>(null)
   const [savedSnapshot, setSavedSnapshot] = useState('')
   const [elevated, setElevated] = useState<boolean | null>(null)
@@ -610,6 +617,19 @@ const SettingsPage = forwardRef<SettingsPageHandle>(function SettingsPage(_props
             </button>
           </div>
         )}
+      </section>
+
+      <section className="panel">
+        <h3>新手引导</h3>
+        <p className="muted">用演示走一遍整理、按工具开关和分组视图，不会改你磁盘上的文件。</p>
+        <button
+          type="button"
+          className="btn onboarding-replay-btn"
+          disabled={!onReplayOnboarding}
+          onClick={() => onReplayOnboarding?.()}
+        >
+          重新观看引导
+        </button>
       </section>
 
       <section className="panel">

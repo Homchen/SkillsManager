@@ -51,6 +51,17 @@ func (a *App) SetSkillsLayout(layout string) error {
 	}, "layout", layout)
 }
 
+func (a *App) ShouldShowOnboarding() bool {
+	v, _ := applog.OpValue("ShouldShowOnboarding", func() (bool, error) {
+		return a.inner.ShouldShowOnboarding(), nil
+	})
+	return v
+}
+
+func (a *App) CompleteOnboarding() error {
+	return applog.Op("CompleteOnboarding", a.inner.CompleteOnboarding)
+}
+
 func (a *App) SaveConfig(cfg config.Config) error {
 	return applog.Op("SaveConfig", func() error {
 		return a.inner.SaveConfig(cfg)

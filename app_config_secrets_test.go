@@ -64,6 +64,52 @@ func TestStartupCorruptSettingsLeavesEnv(t *testing.T) {
 	}
 }
 
+func TestSaveConfigPreservesOnboardingCompleted(t *testing.T) {
+	home := isolateAppHome(t)
+	a := newAppCore()
+	a.cfg = config.Default()
+	a.cfg.HubPath = filepath.Join(home, "hub")
+	a.cfg.OnboardingCompleted = true
+	a.settingsPath = filepath.Join(home, ".skillsmanager", "settings.json")
+
+	incoming := a.cfg
+	incoming.OnboardingCompleted = false
+	incoming.LogDebug = true
+	if err := a.SaveConfig(incoming); err != nil {
+		t.Fatal(err)
+	}
+	if !a.cfg.OnboardingCompleted {
+		t.Fatal("SaveConfig must not clear onboardingCompleted")
+	}
+	if !a.cfg.LogDebug {
+		t.Fatal("other settings should persist")
+	}
+}
+
+func TestCompleteOnboardingPersists(t *testing.T) {
+	home := isolateAppHome(t)
+	a := newAppCore()
+	a.cfg = config.Default()
+	a.cfg.HubPath = filepath.Join(home, "hub")
+	a.settingsPath = filepath.Join(home, ".skillsmanager", "settings.json")
+	if !a.ShouldShowOnboarding() {
+		t.Fatal("fresh config should show onboarding")
+	}
+	if err := a.CompleteOnboarding(); err != nil {
+		t.Fatal(err)
+	}
+	if a.ShouldShowOnboarding() {
+		t.Fatal("completed tour should not show again")
+	}
+	loaded, err := config.Load(a.settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.OnboardingCompleted {
+		t.Fatal("onboardingCompleted should be saved")
+	}
+}
+
 func TestSaveConfigEmptyKeysKeepEnvAndMemory(t *testing.T) {
 	home := isolateAppHome(t)
 	if err := config.SaveOpenAIAPIKey("sk-keep"); err != nil {

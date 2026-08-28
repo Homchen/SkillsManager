@@ -18,6 +18,10 @@ export function CancelSkillTranslation() {
   return window['go']['main']['App']['CancelSkillTranslation']();
 }
 
+export function CompleteOnboarding() {
+  return window['go']['main']['App']['CompleteOnboarding']();
+}
+
 export function ConfirmAddWorkdirs(arg1) {
   return window['go']['main']['App']['ConfirmAddWorkdirs'](arg1);
 }
@@ -228,6 +232,10 @@ export function SetSkillOriginalLanguage(arg1, arg2) {
 
 export function SetSkillsLayout(arg1) {
   return window['go']['main']['App']['SetSkillsLayout'](arg1);
+}
+
+export function ShouldShowOnboarding() {
+  return window['go']['main']['App']['ShouldShowOnboarding']();
 }
 
 export function SkipConflict(arg1) {

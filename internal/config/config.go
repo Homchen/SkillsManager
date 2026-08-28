@@ -65,6 +65,10 @@ type Config struct {
 	OpenAIModel               string                  `json:"openAIModel,omitempty"`
 	OpenAITemperature         float64                 `json:"openAITemperature"`
 	LogDebug                  bool                    `json:"logDebug,omitempty"`
+	// OnboardingCompleted is true after the first-run tour is skipped or finished.
+	// Missing from older settings.json files; Load treats absence as true so
+	// existing installs are not interrupted.
+	OnboardingCompleted bool `json:"onboardingCompleted"`
 }
 
 func Default() Config {
@@ -139,8 +143,13 @@ func Load(path string) (Config, error) {
 		} else {
 			cfg.OpenAITemperature = NormalizeOpenAITemperature(cfg.OpenAITemperature)
 		}
+		// Existing installs have no key; do not auto-show the first-run tour.
+		if _, ok := rawKeys["onboardingCompleted"]; !ok {
+			cfg.OnboardingCompleted = true
+		}
 	} else {
 		cfg.OpenAITemperature = NormalizeOpenAITemperature(cfg.OpenAITemperature)
+		cfg.OnboardingCompleted = true
 	}
 	hadLegacyOpenAI := strings.TrimSpace(cfg.OpenAIAPIKey) != ""
 	hadLegacyMS := strings.TrimSpace(cfg.MicrosoftTranslatorKey) != ""

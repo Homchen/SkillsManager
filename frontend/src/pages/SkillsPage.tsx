@@ -1914,6 +1914,7 @@ export default function SkillsPage({
                 ? 'btn btn-icon layout-toggle is-active'
                 : 'btn btn-icon layout-toggle'
             }
+            data-tour="layout"
             onClick={() => void toggleLayout()}
             title={layout === 'flat' ? '切换到分组布局' : '切换到平铺布局'}
             aria-label={layout === 'flat' ? '切换到分组布局' : '切换到平铺布局'}
@@ -1957,6 +1958,7 @@ export default function SkillsPage({
               type="button"
               className="btn btn-icon"
               onClick={onOrganize}
+              data-tour="organize"
               title="一键整理"
               aria-label="一键整理"
             >
@@ -1984,6 +1986,7 @@ export default function SkillsPage({
               type="button"
               className="btn btn-icon"
               onClick={() => void openBulkDialog()}
+              data-tour="bulk"
               title="按工具批量启用 / 禁用"
               aria-label="按工具批量启用 / 禁用"
             >

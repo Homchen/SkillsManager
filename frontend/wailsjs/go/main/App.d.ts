@@ -11,6 +11,8 @@ export function CancelDeepScan():Promise<void>;
 
 export function CancelSkillTranslation():Promise<void>;
 
+export function CompleteOnboarding():Promise<void>;
+
 export function ConfirmAddWorkdirs(arg1:Array<string>):Promise<domain.AddWorkdirsResult>;
 
 export function CreateGroup(arg1:string):Promise<void>;
@@ -116,6 +118,8 @@ export function SetSkillLink(arg1:string,arg2:string,arg3:boolean):Promise<void>
 export function SetSkillOriginalLanguage(arg1:string,arg2:string):Promise<void>;
 
 export function SetSkillsLayout(arg1:string):Promise<void>;
+
+export function ShouldShowOnboarding():Promise<boolean>;
 
 export function SkipConflict(arg1:string):Promise<domain.OrganizePlan>;
 

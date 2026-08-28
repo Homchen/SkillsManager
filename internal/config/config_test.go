@@ -32,6 +32,51 @@ func TestDefaultOpenAIModelMatchesPublicEndpoint(t *testing.T) {
 	}
 }
 
+func TestLoadMissingOnboardingCompletedTreatsAsDone(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	raw := `{"hubPath":"` + filepath.ToSlash(filepath.Join(dir, "hub")) + `","tools":[],"trashRetentionDays":7}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.OnboardingCompleted {
+		t.Fatal("legacy settings without onboardingCompleted should skip the tour")
+	}
+}
+
+func TestLoadExplicitOnboardingCompletedFalse(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	raw := `{"hubPath":"` + filepath.ToSlash(filepath.Join(dir, "hub")) + `","tools":[],"trashRetentionDays":7,"onboardingCompleted":false}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.OnboardingCompleted {
+		t.Fatal("explicit false must still show the tour")
+	}
+}
+
+func TestLoadMissingFileOnboardingNotCompleted(t *testing.T) {
+	dir := t.TempDir()
+	loaded, err := Load(filepath.Join(dir, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.OnboardingCompleted {
+		t.Fatal("fresh default must show the tour")
+	}
+}
+
 func TestLoadAppliesTranslationDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
