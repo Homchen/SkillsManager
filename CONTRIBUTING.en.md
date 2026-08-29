@@ -59,5 +59,6 @@ Keep `build/windows/wails.exe.manifest` at `asInvoker`. Do not switch it to `req
 ## Releases (maintainers)
 
 1. Set `info.productVersion` in `wails.json` to match the upcoming tag (for example `1.2.0`)
-2. Push the tag: `git tag v1.2.0 && git push origin v1.2.0`
-3. GitHub Actions builds Windows artifacts and uploads them to the Release (unsigned)
+2. Move `[Unreleased]` entries in `CHANGELOG.md` into a new version section titled `## [1.2.0] - YYYY-MM-DD`, then commit
+3. Push the tag: `git tag v1.2.0 && git push origin v1.2.0` (the tag must point at a commit that already contains that changelog section)
+4. GitHub Actions builds Windows artifacts and uploads them to the Release (unsigned). The version’s changelog is placed at the top of the notes, followed by GitHub’s auto-generated PR / commit list

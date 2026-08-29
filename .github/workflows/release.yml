@@ -65,10 +65,47 @@ jobs:
           }
           Get-ChildItem -Path build/bin -Filter "*.exe" | Format-Table Name, Length
 
+      - name: Extract changelog for this tag
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag -replace '^v', ''
+          $changelogPath = "CHANGELOG.md"
+          if (-not (Test-Path -LiteralPath $changelogPath)) {
+            throw "CHANGELOG.md not found"
+          }
+          $lines = Get-Content -LiteralPath $changelogPath -Encoding utf8
+          $heading = [regex]::Escape($version)
+          $start = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^##\s+\[v?$heading\]") {
+              $start = $i
+              break
+            }
+          }
+          if ($start -lt 0) {
+            throw "CHANGELOG.md has no section for $tag (expected a heading like ## [$version] - YYYY-MM-DD)"
+          }
+          $end = $lines.Count
+          for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^##\s+" -or $lines[$i] -match "^\[[^\]]+\]:\s+\S+") {
+              $end = $i
+              break
+            }
+          }
+          $section = ($lines[$start..($end - 1)] -join "`n").Trim()
+          if ([string]::IsNullOrWhiteSpace($section)) {
+            throw "CHANGELOG.md section for $tag is empty"
+          }
+          $out = Join-Path $env:RUNNER_TEMP "release-body.md"
+          [System.IO.File]::WriteAllText($out, $section + "`n", [System.Text.UTF8Encoding]::new($false))
+          "RELEASE_BODY_PATH=$out" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             build/bin/*-installer.exe
+          body_path: ${{ env.RELEASE_BODY_PATH }}
           generate_release_notes: true
           fail_on_unmatched_files: true

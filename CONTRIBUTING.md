@@ -59,5 +59,6 @@ Windows 清单 `build/windows/wails.exe.manifest` 必须保持 `asInvoker`，不
 ## 发版（维护者）
 
 1. 将 `wails.json` 的 `info.productVersion` 改为与即将打的 tag 一致（例如 `1.2.0`）
-2. 推送 tag：`git tag v1.2.0 && git push origin v1.2.0`
-3. GitHub Actions 会构建 Windows 产物并上传到 Release（未签名）
+2. 在 `CHANGELOG.md` 把 `[Unreleased]` 下的条目移到新版本章节，标题形如 `## [1.2.0] - YYYY-MM-DD`，并提交
+3. 推送 tag：`git tag v1.2.0 && git push origin v1.2.0`（tag 必须打在已包含该 Changelog 章节的 commit 上）
+4. GitHub Actions 会构建 Windows 产物并上传到 Release（未签名）；正文开头是该版本的 Changelog，后面追加自动生成的 PR / commit 列表
