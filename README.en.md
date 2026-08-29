@@ -8,6 +8,41 @@ Cursor, Claude Code, Codex, OpenCode, and similar tools each keep their own skil
 
 **Windows** installers are what we ship. Organizing skills and attaching or removing links needs administrator rights, or Windows Developer Mode turned on.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/homePage.png" alt="Home"><br>
+      Home
+    </td>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/enable.png" alt="Enable a skill"><br>
+      Enable a skill
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/detail.png" alt="Skill details"><br>
+      Skill details
+    </td>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/arrange.png" alt="Organize"><br>
+      Organize
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/usage.png" alt="Usage"><br>
+      Usage
+    </td>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/setting.png" alt="Settings"><br>
+      Settings
+    </td>
+  </tr>
+</table>
+
 ## Features
 
 - **Edit once, every tool sees it:** Skills live in one hub on your machine. Change a skill in the app, and every linked tool reads the same copy — no more paste-and-forget.

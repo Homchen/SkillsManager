@@ -8,6 +8,41 @@ Cursor、Claude Code、Codex、OpenCode 等工具各自维护一套 skills 目�
 
 目前提供 **Windows** 安装包。整理技能、挂上或撤下链接时，需要管理员权限，或已开启 Windows「开发人员模式」。
 
+## 界面预览
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/homePage.png" alt="系统首页"><br>
+      系统首页
+    </td>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/enable.png" alt="启用 skill"><br>
+      启用 skill
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/detail.png" alt="skill 详情"><br>
+      skill 详情
+    </td>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/arrange.png" alt="一键整理"><br>
+      一键整理
+    </td>
+  </tr>
+  <tr>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/usage.png" alt="使用统计"><br>
+      使用统计
+    </td>
+    <td align="center" valign="top" width="50%">
+      <img src="assets/setting.png" alt="系统设置"><br>
+      系统设置
+    </td>
+  </tr>
+</table>
+
 ## 功能
 
 - **一份技能，处处生效**：所有技能集中保存在本机源仓。你在应用里改一处，已对接的工具立刻读到同一份，不用再复制粘贴、改漏某一边。
