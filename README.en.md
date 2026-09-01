@@ -2,9 +2,13 @@
 
 **Language:** [中文](README.md) · English
 
-Keep your AI coding Skills in one place. Edit once, use them everywhere.
+<p align="center">
+    <a href="https://linux.do"><img src="https://shorturl.at/ggSqS" alt="LINUX DO" /></a>
+</p>
 
-Cursor, Claude Code, Codex, OpenCode, and similar tools each keep their own skills folder. The same skill often gets copied many times, so a fix in one place is easy to miss in another. SkillsManager keeps a **single copy** on your machine and lets each tool read it through a link.
+Keep Skills scattered across AI coding tools in one place. Edit, translate, track usage, and organize — one hub, used everywhere.
+
+Cursor, Claude Code, Codex, OpenCode, and similar tools each keep their own skills folder. The same skill often gets copied many times, so a fix in one place is easy to miss in another. SkillsManager keeps a **single copy** on your machine and lets each tool read it through a link — you always edit the same file. The same skill can have language versions you switch between; with an optional Agent hook, you can also see how often each skill is read or invoked.
 
 **Windows** installers are what we ship. Organizing skills and attaching or removing links needs administrator rights, or Windows Developer Mode turned on.
 

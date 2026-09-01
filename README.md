@@ -2,9 +2,13 @@
 
 **文档语言：** 中文 · [English](README.en.md)
 
-把散落在各个 AI 编程工具里的 Skills 收拢到一处。编辑一份，各处共用。
+<p align="center">
+    <a href="https://linux.do"><img src="https://shorturl.at/ggSqS" alt="LINUX DO" /></a>
+</p>
 
-Cursor、Claude Code、Codex、OpenCode 等工具各自维护一套 skills 目录，同一份技能常常被复制多份，改一处漏一处。SkillsManager 在本机保管**唯一一份**技能正文，再让各工具通过链接去读它——你改的永远是同一份。
+把散落在各个 AI 编程工具里的 Skills 收拢到一处。编辑、翻译、统计、整理，一份源仓，各处共用。
+
+Cursor、Claude Code、Codex、OpenCode 等工具各自维护一套 skills 目录，同一份技能常常被复制多份，改一处漏一处。SkillsManager 在本机保管**唯一一份**技能正文，再让各工具通过链接去读它——你改的永远是同一份。同一技能可以生成多语言版本并随时切换；装上可选的 Agent hook 后，还能看到各技能被读取或调用的次数与趋势。
 
 目前提供 **Windows** 安装包。整理技能、挂上或撤下链接时，需要管理员权限，或已开启 Windows「开发人员模式」。
 
