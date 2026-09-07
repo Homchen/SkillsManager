@@ -83,6 +83,8 @@ export function ReadConflictFileTexts(arg1:string,arg2:string):Promise<domain.Co
 
 export function ReadSkillFile(arg1:domain.SkillVersionRef,arg2:string):Promise<string>;
 
+export function ReloadConfig():Promise<config.Config>;
+
 export function RenameGroup(arg1:string,arg2:string):Promise<void>;
 
 export function RenameSkill(arg1:string,arg2:string):Promise<void>;

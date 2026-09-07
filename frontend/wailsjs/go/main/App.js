@@ -162,6 +162,10 @@ export function ReadSkillFile(arg1, arg2) {
   return window['go']['main']['App']['ReadSkillFile'](arg1, arg2);
 }
 
+export function ReloadConfig() {
+  return window['go']['main']['App']['ReloadConfig']();
+}
+
 export function RenameGroup(arg1, arg2) {
   return window['go']['main']['App']['RenameGroup'](arg1, arg2);
 }

@@ -143,6 +143,115 @@ func TestSaveConfigEmptyKeysKeepEnvAndMemory(t *testing.T) {
 	}
 }
 
+func toolIDs(cfg config.Config) []string {
+	ids := make([]string, 0, len(cfg.Tools))
+	for _, t := range cfg.Tools {
+		ids = append(ids, t.ID)
+	}
+	return ids
+}
+
+func hasToolID(cfg config.Config, id string) bool {
+	for _, t := range cfg.Tools {
+		if t.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func TestGetConfigDoesNotReadDisk(t *testing.T) {
+	home := isolateAppHome(t)
+	a := newAppCore()
+	a.cfg = config.Default()
+	a.cfg.HubPath = filepath.Join(home, "hub")
+	a.settingsPath = filepath.Join(home, ".skillsmanager", "settings.json")
+	if err := a.persistSettings(); err != nil {
+		t.Fatal(err)
+	}
+
+	onDisk, err := config.Load(a.settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	onDisk.Tools = append(onDisk.Tools, config.ToolMapping{
+		ID:      "merge-wd-alpha",
+		Path:    filepath.Join(home, "merge-workdirs", "alpha"),
+		Enabled: true,
+	})
+	if err := onDisk.SaveSettingsJSON(a.settingsPath); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := a.GetConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasToolID(got, "merge-wd-alpha") {
+		t.Fatalf("GetConfig must not silently reread disk, tools=%v", toolIDs(got))
+	}
+}
+
+func TestReloadConfigPicksUpExternalTools(t *testing.T) {
+	home := isolateAppHome(t)
+	a := newAppCore()
+	a.cfg = config.Default()
+	a.cfg.HubPath = filepath.Join(home, "hub")
+	a.settingsPath = filepath.Join(home, ".skillsmanager", "settings.json")
+	if err := a.persistSettings(); err != nil {
+		t.Fatal(err)
+	}
+
+	onDisk, err := config.Load(a.settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	onDisk.Tools = append(onDisk.Tools, config.ToolMapping{
+		ID:      "merge-wd-alpha",
+		Path:    filepath.Join(home, "merge-workdirs", "alpha"),
+		Enabled: true,
+	})
+	if err := onDisk.SaveSettingsJSON(a.settingsPath); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := a.ReloadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasToolID(got, "merge-wd-alpha") {
+		t.Fatalf("ReloadConfig tools=%v", toolIDs(got))
+	}
+	if !hasToolID(a.cfg, "merge-wd-alpha") {
+		t.Fatalf("memory after reload tools=%v", toolIDs(a.cfg))
+	}
+}
+
+func TestReloadConfigCorruptKeepsMemory(t *testing.T) {
+	home := isolateAppHome(t)
+	a := newAppCore()
+	a.cfg = config.Default()
+	a.cfg.HubPath = filepath.Join(home, "hub")
+	a.cfg.Tools = append(a.cfg.Tools, config.ToolMapping{ID: "keep-me", Path: filepath.Join(home, "keep"), Enabled: true})
+	a.settingsPath = filepath.Join(home, ".skillsmanager", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(a.settingsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(a.settingsPath, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := a.ReloadConfig(); err == nil {
+		t.Fatal("corrupt settings.json should fail reload")
+	}
+	if !hasToolID(a.cfg, "keep-me") {
+		t.Fatalf("failed reload must keep memory tools=%v", toolIDs(a.cfg))
+	}
+	if _, err := os.Stat(a.settingsPath + ".corrupt"); err == nil {
+		t.Fatal("reload must not rename a corrupt file")
+	}
+}
+
 func TestPersistSettingsResolvesEmptyPath(t *testing.T) {
 	home := isolateAppHome(t)
 	if err := config.SaveOpenAIAPIKey("sk-keep"); err != nil {

@@ -32,6 +32,10 @@ func (a *App) GetConfig() (config.Config, error) {
 	return applog.OpValue("GetConfig", a.inner.GetConfig)
 }
 
+func (a *App) ReloadConfig() (config.Config, error) {
+	return applog.OpValue("ReloadConfig", a.inner.ReloadConfig)
+}
+
 func (a *App) GetConfigLoadError() string {
 	v, _ := applog.OpValue("GetConfigLoadError", func() (string, error) {
 		return a.inner.GetConfigLoadError(), nil

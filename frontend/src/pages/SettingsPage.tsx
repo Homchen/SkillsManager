@@ -14,6 +14,7 @@ import {
   LogsDir,
   OpenFolder,
   OpenLogsFolder,
+  ReloadConfig,
   RequestElevation,
   RevealInFolder,
   SaveConfig,
@@ -21,6 +22,7 @@ import {
   TranslateSkillDescription,
 } from '../../wailsjs/go/main/App'
 import type {config} from '../../wailsjs/go/models'
+import {AppToast, useAppToast} from '../components/AppToast'
 import {
   IconActivity,
   IconCheck,
@@ -204,6 +206,7 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
   const [elevating, setElevating] = useState(false)
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
+  const {toast, showToast, dismissToast} = useAppToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editingToolIndex, setEditingToolIndex] = useState<number | null>(null)
@@ -288,11 +291,8 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
     }
   }, [cfg, savedSnapshot])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const [loaded, elev, dir] = await Promise.all([GetConfig(), IsElevated(), LogsDir()])
+  const applyLoadedConfig = useCallback(
+    (loaded: AppConfig, elev: boolean, dir: string) => {
       const next = {
         ...loaded,
         translationEngine: normalizeTranslationEngine(loaded.translationEngine),
@@ -305,12 +305,34 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
       setElevated(Boolean(elev))
       setLogsDir(dir || '')
       setEditingToolIndex(null)
+    },
+    [],
+  )
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [loaded, elev, dir] = await Promise.all([GetConfig(), IsElevated(), LogsDir()])
+      applyLoadedConfig(loaded, Boolean(elev), dir || '')
     } catch (e) {
       setError(errMsg(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [applyLoadedConfig])
+
+  const reloadFromDisk = useCallback(async () => {
+    setError('')
+    setStatus('')
+    try {
+      const [loaded, elev, dir] = await Promise.all([ReloadConfig(), IsElevated(), LogsDir()])
+      applyLoadedConfig(loaded, Boolean(elev), dir || '')
+      showToast({message: '已从本地配置文件重新加载', tone: 'success'})
+    } catch (e) {
+      setError(errMsg(e))
+    }
+  }, [applyLoadedConfig, showToast])
 
   useEffect(() => {
     void load()
@@ -693,6 +715,7 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
 
   return (
     <div className="settings-page">
+      <AppToast toast={toast} onDismiss={dismissToast} />
       {/* 迁移源仓确认弹窗 */}
       {migratePrompt ? (
         <div className="dialog-backdrop" role="presentation">
@@ -820,8 +843,8 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
           <button
             type="button"
             className="btn btn-ghost settings-reload-btn"
-            title="重新从本地加载最新配置"
-            onClick={() => void load()}
+            title="从 settings.json 重新加载，并更新程序正在使用的配置"
+            onClick={() => void reloadFromDisk()}
           >
             <IconRotateCcw size={15} />
             <span>重载</span>

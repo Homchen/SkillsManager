@@ -179,6 +179,30 @@ func (a *appCore) GetConfig() (config.Config, error) {
 	return a.cfg, nil
 }
 
+// ReloadConfig re-reads settings.json into memory and returns it.
+// GetConfig does not do this: the process keeps a.cfg from startup/SaveConfig,
+// so external edits (new tool roots, hub path) are invisible until reload or restart.
+func (a *appCore) ReloadConfig() (config.Config, error) {
+	path := a.settingsPath
+	if path == "" {
+		p, err := config.DefaultSettingsPath()
+		if err != nil {
+			return config.Config{}, userErr(fmt.Errorf("无法定位配置文件: %w", err))
+		}
+		path = p
+		a.settingsPath = p
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return config.Config{}, userErr(fmt.Errorf("无法读取配置文件: %w", err))
+	}
+	a.cfg = cfg
+	a.configLoadError = ""
+	a.ensureHubReady()
+	a.applyLogging()
+	return a.GetConfig()
+}
+
 // GetConfigLoadError returns a user-visible warning if settings.json could not be loaded.
 func (a *appCore) GetConfigLoadError() string {
 	return a.configLoadError
