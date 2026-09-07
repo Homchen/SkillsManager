@@ -511,6 +511,35 @@ export function IconMinimize(props: IconProps) {
   )
 }
 
+/** 向左箭头 / 返回 */
+export function IconArrowLeft(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m12 19-7-7 7-7" />
+      <path d="M19 12H5" />
+    </Icon>
+  )
+}
+
+/** 平滑曲线走势图 */
+export function IconChartSpline(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 17c3.5-9 7.5-9 11 0s4.5-9 7-9" />
+    </Icon>
+  )
+}
+
+/** 折线走势图 */
+export function IconChartLine(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m3 17 6-7 5 5 7-10" />
+    </Icon>
+  )
+}
+
+
 
 
 

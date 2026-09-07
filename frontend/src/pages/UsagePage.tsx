@@ -5,6 +5,9 @@ import AutoScrollText from '../components/AutoScrollText'
 import UsageTrendChart from '../components/UsageTrendChart'
 import {
   IconActivity,
+  IconArrowLeft,
+  IconChartLine,
+  IconChartSpline,
   IconMaximize,
   IconMinimize,
   IconPencil,
@@ -499,6 +502,7 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
                           text={selected.name || selected.id}
                           className="usage-trend-highlight"
                           title={selected.name || selected.id}
+                          mode="hover"
                         />
                         <span className="usage-trend-tail">的调用趋势</span>
                       </>
@@ -507,7 +511,12 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
                     )}
                   </h3>
                   {selected ? (
-                    <span className="usage-tag-share">占区间总量 {selectedShare}</span>
+                    <span
+                      className="usage-tag-share"
+                      title={`占 ${rangeLabel}全体调用总量的 ${selectedShare}`}
+                    >
+                      占比 {selectedShare}
+                    </span>
                   ) : null}
                 </div>
                 <p
@@ -525,46 +534,54 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
               </div>
 
               <div className="usage-trend-actions">
-                <button
-                  type="button"
-                  className={`btn-subtle ${smoothCurve ? 'is-active' : ''}`}
-                  onClick={() => setSmoothCurve(!smoothCurve)}
-                  title={smoothCurve ? '切换为折线视图' : '切换为平滑曲线视图'}
-                >
-                  {smoothCurve ? '平滑曲线' : '折线模式'}
-                </button>
-
                 {selected ? (
-                  <>
+                  <div className="usage-action-group usage-action-group-skill">
                     <button
                       type="button"
-                      className="btn btn-ghost usage-btn-back"
+                      className="usage-btn-action usage-btn-back"
                       onClick={() => setSelectedId(null)}
-                      title="清除技能选中，返回查看全体趋势"
+                      title="清除技能过滤，返回查看全体趋势"
+                      aria-label="返回全体趋势"
                     >
-                      查看全体
+                      <IconArrowLeft size={13} />
+                      <span className="usage-btn-text">返回全体</span>
                     </button>
                     <button
                       type="button"
-                      className="btn btn-primary usage-btn-edit"
+                      className="usage-btn-action usage-btn-edit"
                       onClick={() => onOpenEditor(selected.id)}
                       title="在技能编辑器中打开该技能"
+                      aria-label="在编辑器中打开"
                     >
-                      <IconPencil size={14} />
-                      <span>打开编辑</span>
+                      <IconPencil size={13} />
+                      <span className="usage-btn-text">编辑</span>
                     </button>
-                  </>
+                  </div>
                 ) : null}
 
-                <button
-                  type="button"
-                  className="btn-icon-subtle"
-                  onClick={() => setChartFullscreen(true)}
-                  title="大屏全屏查看趋势图"
-                  aria-label="大屏全屏查看趋势图"
-                >
-                  <IconMaximize size={15} />
-                </button>
+                {selected ? <div className="usage-action-divider" aria-hidden="true" /> : null}
+
+                <div className="usage-action-group usage-action-group-chart">
+                  <button
+                    type="button"
+                    className={`usage-btn-action usage-btn-icon-subtle ${smoothCurve ? 'is-active' : ''}`}
+                    onClick={() => setSmoothCurve(!smoothCurve)}
+                    title={smoothCurve ? '当前为平滑曲线（点击切换为折线）' : '当前为折线模式（点击切换为平滑曲线）'}
+                    aria-label={smoothCurve ? '切换为折线视图' : '切换为平滑曲线视图'}
+                  >
+                    {smoothCurve ? <IconChartSpline size={14} /> : <IconChartLine size={14} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="usage-btn-action usage-btn-icon-subtle"
+                    onClick={() => setChartFullscreen(true)}
+                    title="大屏全屏查看趋势图"
+                    aria-label="大屏全屏查看趋势图"
+                  >
+                    <IconMaximize size={14} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -625,15 +642,21 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
                           text={selected.name || selected.id}
                           className="usage-trend-highlight"
                           title={selected.name || selected.id}
+                          mode="hover"
                         />
-                        <span className="usage-trend-tail">的调用趋势 (全屏大屏)</span>
+                        <span className="usage-trend-tail">调用走势 (大屏)</span>
                       </>
                     ) : (
-                      '全体技能调用趋势 (全屏大屏)'
+                      '全体技能调用走势 (大屏)'
                     )}
                   </h3>
                   {selected ? (
-                    <span className="usage-tag-share">占区间总量 {selectedShare}</span>
+                    <span
+                      className="usage-tag-share"
+                      title={`占 ${rangeLabel}全体调用总量的 ${selectedShare}`}
+                    >
+                      占比 {selectedShare}
+                    </span>
                   ) : null}
                 </div>
                 <p
@@ -651,49 +674,57 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
               </div>
 
               <div className="usage-trend-actions">
-                <button
-                  type="button"
-                  className={`btn-subtle ${smoothCurve ? 'is-active' : ''}`}
-                  onClick={() => setSmoothCurve(!smoothCurve)}
-                  title={smoothCurve ? '切换为折线视图' : '切换为平滑曲线视图'}
-                >
-                  {smoothCurve ? '平滑曲线' : '折线模式'}
-                </button>
-
                 {selected ? (
-                  <>
+                  <div className="usage-action-group usage-action-group-skill">
                     <button
                       type="button"
-                      className="btn btn-ghost usage-btn-back"
+                      className="usage-btn-action usage-btn-back"
                       onClick={() => setSelectedId(null)}
-                      title="清除技能选中，返回查看全体趋势"
+                      title="清除技能过滤，返回查看全体趋势"
+                      aria-label="返回全体趋势"
                     >
-                      查看全体
+                      <IconArrowLeft size={13} />
+                      <span className="usage-btn-text">返回全体</span>
                     </button>
                     <button
                       type="button"
-                      className="btn btn-primary usage-btn-edit"
+                      className="usage-btn-action usage-btn-edit"
                       onClick={() => {
                         setChartFullscreen(false)
                         onOpenEditor(selected.id)
                       }}
                       title="在技能编辑器中打开该技能"
+                      aria-label="在编辑器中打开"
                     >
-                      <IconPencil size={14} />
-                      <span>打开编辑</span>
+                      <IconPencil size={13} />
+                      <span className="usage-btn-text">编辑</span>
                     </button>
-                  </>
+                  </div>
                 ) : null}
 
-                <button
-                  type="button"
-                  className="btn-icon-subtle"
-                  onClick={() => setChartFullscreen(false)}
-                  title="退出全屏 (ESC)"
-                  aria-label="退出全屏"
-                >
-                  <IconMinimize size={16} />
-                </button>
+                {selected ? <div className="usage-action-divider" aria-hidden="true" /> : null}
+
+                <div className="usage-action-group usage-action-group-chart">
+                  <button
+                    type="button"
+                    className={`usage-btn-action usage-btn-icon-subtle ${smoothCurve ? 'is-active' : ''}`}
+                    onClick={() => setSmoothCurve(!smoothCurve)}
+                    title={smoothCurve ? '当前为平滑曲线（点击切换为折线）' : '当前为折线模式（点击切换为平滑曲线）'}
+                    aria-label={smoothCurve ? '切换为折线视图' : '切换为平滑曲线视图'}
+                  >
+                    {smoothCurve ? <IconChartSpline size={14} /> : <IconChartLine size={14} />}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="usage-btn-action usage-btn-icon-subtle"
+                    onClick={() => setChartFullscreen(false)}
+                    title="退出全屏 (ESC)"
+                    aria-label="退出全屏"
+                  >
+                    <IconMinimize size={14} />
+                  </button>
+                </div>
               </div>
             </div>
 

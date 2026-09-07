@@ -6020,18 +6020,20 @@ body.is-marquee-selecting * {
 .usage-trend-card {
   display: flex;
   flex-direction: column;
+  container-type: inline-size;
+  container-name: trendcard;
 }
 
 .usage-trend-header {
-  padding: 12px 18px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   flex-shrink: 0;
   flex-wrap: nowrap !important;
-  min-height: 56px;
+  min-height: 54px;
   box-sizing: border-box;
 }
 
@@ -6040,7 +6042,8 @@ body.is-marquee-selecting * {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  flex: 1;
+  flex: 1 1 0%;
+  overflow: hidden;
 }
 
 .usage-trend-title-line {
@@ -6048,16 +6051,18 @@ body.is-marquee-selecting * {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .usage-trend-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
   color: var(--text);
-  display: flex;
+  display: inline-flex;
   align-items: baseline;
   min-width: 0;
+  flex: 0 1 auto;
   overflow: hidden;
 }
 
@@ -6067,27 +6072,37 @@ body.is-marquee-selecting * {
   vertical-align: bottom;
   min-width: 0;
   flex: 0 1 auto;
-  max-width: min(360px, 100%);
+  max-width: 100%;
   text-overflow: clip;
 }
 
 .usage-trend-tail {
-  flex-shrink: 0;
+  flex: 0 1 auto;
+  flex-shrink: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-left: 3px;
 }
 
 .usage-tag-share {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  padding: 1px 7px;
+  height: 20px;
+  padding: 0 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
   flex-shrink: 0;
   white-space: nowrap;
+  line-height: 1;
 }
 
 .usage-trend-subtitle {
@@ -6101,76 +6116,160 @@ body.is-marquee-selecting * {
 .usage-trend-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   flex-shrink: 0;
   white-space: nowrap;
 }
 
-.usage-btn-back {
-  height: 30px;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 550;
-  border-radius: 6px;
-  white-space: nowrap;
-}
-
-.usage-btn-edit {
-  height: 30px;
-  padding: 0 12px;
-  font-size: 12.5px;
-  font-weight: 550;
-  border-radius: 6px;
-  white-space: nowrap;
+/* 按钮操作分组 */
+.usage-action-group {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.btn-subtle {
-  height: 30px;
-  padding: 0 10px;
+/* 分组之间的细分隔线 */
+.usage-action-divider {
+  width: 1px;
+  height: 15px;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+  margin: 0 1px;
+  flex-shrink: 0;
+}
+
+/* 统一动作按钮基础规范 */
+.usage-btn-action {
+  height: 28px;
+  padding: 0 8px;
   font-size: 12px;
   font-weight: 550;
   border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+  white-space: nowrap;
+  user-select: none;
 }
 
-.btn-subtle:hover {
+/* 返回全体（次要导航操作） */
+.usage-btn-back {
+  background: color-mix(in srgb, var(--text) 3%, var(--surface));
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.usage-btn-back:hover {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 30%, var(--border));
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
+  border-color: color-mix(in srgb, var(--text) 25%, var(--border));
 }
 
-.btn-subtle.is-active {
+.usage-btn-back:active {
+  transform: scale(0.98);
+}
+
+/* 打开编辑：轻量主操作，克制不刺眼 */
+.usage-btn-edit {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  font-weight: 600;
 }
 
-.btn-icon-subtle {
-  width: 30px;
-  height: 30px;
+.usage-btn-edit:hover {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+  box-shadow: 0 2px 5px rgba(37, 99, 235, 0.22);
+}
+
+.usage-btn-edit:active {
+  transform: scale(0.98);
+}
+
+/* 图标类微型按钮（曲线切换、全屏） */
+.usage-btn-icon-subtle {
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--text) 3%, var(--surface));
   color: var(--muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
-.btn-icon-subtle:hover {
+.usage-btn-icon-subtle:hover {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 30%, var(--border));
-  background: color-mix(in srgb, var(--text) 4%, var(--surface));
+  border-color: color-mix(in srgb, var(--text) 25%, var(--border));
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+}
+
+.usage-btn-icon-subtle.is-active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.usage-btn-icon-subtle:active {
+  transform: scale(0.96);
+}
+
+/* 容器自适应：当卡片宽度 <= 580px 时，自动折叠按钮文字并隐藏非核心后缀，释放宝贵空间给技能名 */
+@container trendcard (max-width: 580px) {
+  .usage-trend-tail {
+    display: none;
+  }
+  .usage-btn-back .usage-btn-text,
+  .usage-btn-edit .usage-btn-text {
+    display: none;
+  }
+  .usage-btn-back,
+  .usage-btn-edit {
+    width: 28px;
+    padding: 0;
+  }
+}
+
+/* 媒体查询降级适配 */
+@media (max-width: 1100px) {
+  .usage-trend-tail {
+    display: none;
+  }
+  .usage-btn-back .usage-btn-text,
+  .usage-btn-edit .usage-btn-text {
+    display: none;
+  }
+  .usage-btn-back,
+  .usage-btn-edit {
+    width: 28px;
+    padding: 0;
+  }
+}
+
+/* 极窄窗口自适应 */
+@media (max-width: 760px) {
+  .usage-trend-header {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .usage-trend-actions {
+    gap: 4px;
+  }
+  .usage-action-group {
+    gap: 3px;
+  }
 }
 
 /* 图表容器 */
@@ -6505,9 +6604,10 @@ body.is-marquee-selecting * {
   font-size: 17px;
   font-weight: 700;
   color: var(--text);
-  display: flex;
+  display: inline-flex;
   align-items: baseline;
   min-width: 0;
+  flex: 0 1 auto;
   overflow: hidden;
 }
 
