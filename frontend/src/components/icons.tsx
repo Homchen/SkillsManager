@@ -542,6 +542,86 @@ export function IconChartLine(props: IconProps) {
   )
 }
 
+/** Git 分支合并 */
+export function IconGitMerge(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="18" cy="18" r="3" />
+      <circle cx="6" cy="6" r="3" />
+      <path d="M6 9v12" />
+      <path d="M18 15V9a9 9 0 0 0-9-9" />
+    </Icon>
+  )
+}
+
+/** 通用文件 */
+export function IconFile(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+    </Icon>
+  )
+}
+
+/** 文本/文档文件 */
+export function IconFileText(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" x2="8" y1="13" y2="13" />
+      <line x1="16" x2="8" y1="17" y2="17" />
+      <line x1="10" x2="8" y1="9" y2="9" />
+    </Icon>
+  )
+}
+
+/** 代码文件 */
+export function IconFileCode(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+      <path d="m10 13-2 2 2 2" />
+      <path d="m14 17 2-2-2-2" />
+    </Icon>
+  )
+}
+
+/** 二进制/数据文件 */
+export function IconFileBinary(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+      <rect x="8" y="12" width="3" height="5" rx="0.5" />
+      <path d="M14 12v5" />
+    </Icon>
+  )
+}
+
+/** 向右箭头 */
+export function IconArrowRight(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="12 5 19 12 12 19" />
+    </Icon>
+  )
+}
+
+/** 成功勾选圆圈 */
+export function IconCheckCircle2(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12 2 2 4-4" />
+    </Icon>
+  )
+}
+
+
 
 
 

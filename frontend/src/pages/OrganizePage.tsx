@@ -23,12 +23,21 @@ import {
   IconActivity,
   IconAlertTriangle,
   IconArrowLeft,
+  IconArrowRight,
   IconCheck,
+  IconCheckCircle2,
   IconChevron,
   IconCopy,
+  IconFile,
+  IconFileBinary,
+  IconFileCode,
+  IconFileText,
   IconFolderPlus,
   IconFolderSync,
+  IconGitMerge,
   IconLink,
+  IconMaximize,
+  IconMinimize,
   IconRefresh,
   IconRotateCcw,
   IconSearch,
@@ -43,6 +52,7 @@ import {getToolBadge} from '../lib/toolBadge'
 import {
   calculateOrganizeMetrics,
   conflictFileProgress,
+  conflictFilesReady,
   conflictRoundNeedsApply,
   conflictSkillNeedsAttention,
   detectToolFromPath,
@@ -172,6 +182,7 @@ export default function OrganizePage({onBack}: Props) {
   const [deepScanning, setDeepScanning] = useState(false)
   const [deepProgress, setDeepProgress] = useState('')
   const [applyingRound, setApplyingRound] = useState(false)
+  const [isConflictMaximized, setIsConflictMaximized] = useState(false)
   const [actionQuery, setActionQuery] = useState('')
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all')
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -1834,59 +1845,129 @@ export default function OrganizePage({onBack}: Props) {
       {conflictOpen && conflicts.length > 0 ? (
         <div className="dialog-backdrop" role="presentation">
           <div
-            className="dialog dialog-conflict"
+            className={`dialog dialog-conflict ${isConflictMaximized ? 'is-maximized' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="conflict-dialog-title"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* 现代化沉浸工作台 Header */}
             <div className="dialog-conflict-head">
-              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-                <IconAlertTriangle size={18} style={{color: '#d97706'}} />
-                <h2 id="conflict-dialog-title">冲突合并工作台</h2>
+              <div className="dialog-conflict-brand">
+                <div className="conflict-brand-icon-wrap" aria-hidden="true">
+                  <IconGitMerge size={19} />
+                </div>
+                <div className="conflict-title-group">
+                  <div className="conflict-title-row">
+                    <h2 id="conflict-dialog-title">冲突合并工作台</h2>
+                    {(() => {
+                      const totalSkills = conflicts.length
+                      const readySkills = conflicts.filter((c) => conflictFilesReady(c)).length
+                      const allReady = readySkills >= totalSkills
+                      return (
+                        <span
+                          className={`conflict-global-badge ${allReady ? 'is-ready' : 'is-pending'}`}
+                        >
+                          {allReady ? (
+                            <>
+                              <IconCheck size={12} />
+                              <span>全部技能已就绪</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="pulse-indicator" />
+                              <span>
+                                待决议 {totalSkills - readySkills} / {totalSkills} 个技能
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                  <span className="conflict-subtitle">
+                    逐一审查源仓与待迁入来源之间的冲突，完成行级或文件级决议
+                  </span>
+                </div>
               </div>
-              <button type="button" className="btn" onClick={closeConflictDialog}>
-                关闭
-              </button>
+
+              <div className="dialog-conflict-window-actions">
+                <button
+                  type="button"
+                  className="conflict-window-btn"
+                  title={isConflictMaximized ? '还原窗口' : '最大化全屏工作台'}
+                  onClick={() => setIsConflictMaximized((prev) => !prev)}
+                >
+                  {isConflictMaximized ? <IconMinimize size={15} /> : <IconMaximize size={15} />}
+                </button>
+                <button
+                  type="button"
+                  className="conflict-window-btn btn-close"
+                  onClick={closeConflictDialog}
+                  title="关闭工作台（进度将自动保留）"
+                >
+                  <IconX size={16} />
+                </button>
+              </div>
             </div>
 
             {dialogError ? <div className="dialog-error">{dialogError}</div> : null}
 
             {/* 冲突技能切换选项卡 */}
-            <div className="conflict-tabs-scroll conflict-tabs">
-              {conflicts.map((c) => {
-                const {resolved, total} = conflictFileProgress(c)
-                const isDecided = resolved >= total && total > 0
-                return (
-                  <button
-                    key={c.skillId}
-                    type="button"
-                    className={`conflict-tab-item conflict-tab ${
-                      activeConflict?.skillId === c.skillId ? 'is-active active' : ''
-                    }`}
-                    onClick={() => {
-                      setActiveConflictId(c.skillId)
-                      setDialogError('')
-                    }}
-                  >
-                    <span>{c.skillId}</span>
-                    {total > 0 ? (
-                      <span
-                        className={`organize-tab-count ${
-                          isDecided ? '' : 'is-attention'
-                        }`}
-                      >
-                        {resolved}/{total}
-                      </span>
-                    ) : null}
-                    {c.userSkipped ? (
-                      <span className="muted">· 已跳过</span>
-                    ) : isDecided ? (
-                      <span style={{color: '#15803d'}}>✓</span>
-                    ) : null}
-                  </button>
-                )
-              })}
+            <div className="conflict-tabs-container">
+              <div className="conflict-tabs-scroll conflict-tabs">
+                {conflicts.map((c) => {
+                  const {resolved, total} = conflictFileProgress(c)
+                  const isDecided = resolved >= total && total > 0
+                  const isSkipped = Boolean(c.userSkipped)
+                  const percent = total > 0 ? Math.min(100, Math.round((resolved / total) * 100)) : 100
+                  const isActive = activeConflict?.skillId === c.skillId
+
+                  return (
+                    <button
+                      key={c.skillId}
+                      type="button"
+                      className={`conflict-tab-card ${isActive ? 'is-active' : ''} ${
+                        isDecided ? 'is-decided' : ''
+                      } ${isSkipped ? 'is-skipped' : ''}`}
+                      onClick={() => {
+                        setActiveConflictId(c.skillId)
+                        setDialogError('')
+                      }}
+                    >
+                      <div className="tab-card-header">
+                        <span className="mono tab-skill-name" title={c.skillId}>
+                          {c.skillId}
+                        </span>
+                        {isSkipped ? (
+                          <span className="tab-status-chip is-muted">已跳过</span>
+                        ) : isDecided ? (
+                          <span className="tab-status-chip is-done">
+                            <IconCheck size={11} />
+                            <span>完成</span>
+                          </span>
+                        ) : total > 0 ? (
+                          <span className="tab-status-chip is-attention">
+                            {resolved}/{total}
+                          </span>
+                        ) : (
+                          <span className="tab-status-chip is-neutral">无需改动</span>
+                        )}
+                      </div>
+
+                      {/* 卡片底边微型进度槽 */}
+                      <div className="tab-card-progress">
+                        <div
+                          className={`tab-card-progress-bar ${
+                            isSkipped ? 'is-skipped' : isDecided ? 'is-done' : 'is-pending'
+                          }`}
+                          style={{width: `${percent}%`}}
+                        />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             {activeConflict ? (
@@ -1904,20 +1985,75 @@ export default function OrganizePage({onBack}: Props) {
               />
             ) : null}
 
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={closeConflictDialog}
-              >
-                完成并返回列表
-              </button>
+            {/* 底部状态总览与完成按钮 */}
+            <div className="dialog-actions dialog-conflict-footer">
+              <div className="conflict-footer-summary">
+                {(() => {
+                  const total = conflicts.length
+                  const ready = conflicts.filter((c) => conflictFilesReady(c)).length
+                  const allDone = ready >= total
+                  return (
+                    <div className="conflict-progress-overview">
+                      <div className="overview-text">
+                        <span className="overview-label">整体决议进度：</span>
+                        <span className={`overview-count ${allDone ? 'is-all-done' : ''}`}>
+                          {ready} / {total} 技能就绪
+                        </span>
+                      </div>
+                      <div className="overview-track">
+                        <div
+                          className="overview-bar"
+                          style={{width: `${total > 0 ? Math.round((ready / total) * 100) : 100}%`}}
+                        />
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+
+              <div className="conflict-footer-buttons">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-done"
+                  onClick={closeConflictDialog}
+                >
+                  <IconCheck size={15} />
+                  <span>完成并返回列表</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       ) : null}
     </div>
   )
+}
+
+function getConflictFileIcon(relPath: string, isText: boolean) {
+  if (!isText) {
+    return <IconFileBinary size={15} className="conflict-type-icon is-binary" />
+  }
+  const lower = relPath.toLowerCase()
+  if (lower.endsWith('.md') || lower.endsWith('.txt') || lower.endsWith('.rst')) {
+    return <IconFileText size={15} className="conflict-type-icon is-doc" />
+  }
+  if (
+    lower.endsWith('.py') ||
+    lower.endsWith('.js') ||
+    lower.endsWith('.ts') ||
+    lower.endsWith('.tsx') ||
+    lower.endsWith('.jsx') ||
+    lower.endsWith('.go') ||
+    lower.endsWith('.sh') ||
+    lower.endsWith('.ps1') ||
+    lower.endsWith('.json') ||
+    lower.endsWith('.yaml') ||
+    lower.endsWith('.yml') ||
+    lower.endsWith('.toml')
+  ) {
+    return <IconFileCode size={15} className="conflict-type-icon is-code" />
+  }
+  return <IconFile size={15} className="conflict-type-icon is-generic" />
 }
 
 function ConflictPanel({
@@ -1943,6 +2079,8 @@ function ConflictPanel({
     files[0]?.relativePath ??
     ''
   const [selectedRel, setSelectedRel] = useState(firstDiff)
+  const [fileFilter, setFileFilter] = useState<'all' | 'diff' | 'pending'>('all')
+  const [copiedSide, setCopiedSide] = useState<'a' | 'b' | null>(null)
   const [textA, setTextA] = useState('')
   const [textB, setTextB] = useState('')
   const [loadingTexts, setLoadingTexts] = useState(true)
@@ -2000,119 +2138,271 @@ function ConflictPanel({
     selected?.isText,
   ])
 
+  function handleCopyPath(path: string, side: 'a' | 'b') {
+    void navigator.clipboard.writeText(path).then(() => {
+      setCopiedSide(side)
+      setTimeout(() => setCopiedSide(null), 1800)
+    })
+  }
+
   const choice = selected?.choice ?? ''
   const needsChoice = selected?.status === 'both_diff'
 
+  const diffFiles = useMemo(() => files.filter((f) => f.status === 'both_diff'), [files])
+  const pendingFiles = useMemo(
+    () => diffFiles.filter((f) => !bothDiffResolved(f)),
+    [diffFiles],
+  )
+  const resolvedCount = diffFiles.length - pendingFiles.length
+
+  const filteredFiles = useMemo(() => {
+    if (fileFilter === 'diff') return diffFiles
+    if (fileFilter === 'pending') return pendingFiles
+    return files
+  }, [files, diffFiles, pendingFiles, fileFilter])
+
   return (
     <div className="conflict-panel">
-      {/* 来源对比元数据卡片 */}
-      <div className="conflict-side-cards">
-        <div className="conflict-side-card">
-          <span className="conflict-side-title">侧 A（源仓目标）</span>
-          <span className="mono path-line" title={conflict.sideA}>
-            {conflict.sideA}
-          </span>
-        </div>
-        <div className="conflict-side-card">
-          <span className="conflict-side-title">侧 B（待迁入来源）</span>
-          <span className="mono path-line" title={conflict.sideB}>
-            {conflict.sideB}
-          </span>
-        </div>
-      </div>
+      {/* 来源对比与技能动作集成工具条 */}
+      <div className="conflict-context-bar">
+        <div className="conflict-paths-strip">
+          <div className="conflict-path-pill path-a">
+            <span className="side-badge badge-a">侧 A · 源仓</span>
+            <span className="mono path-line" title={conflict.sideA}>
+              {conflict.sideA}
+            </span>
+            <button
+              type="button"
+              className="path-copy-btn"
+              title="复制侧 A 路径"
+              onClick={() => handleCopyPath(conflict.sideA, 'a')}
+            >
+              {copiedSide === 'a' ? <IconCheck size={12} /> : <IconCopy size={12} />}
+            </button>
+          </div>
 
-      <div
-        className="page-toolbar compact"
-        style={{justifyContent: 'space-between', marginBottom: 10}}
-      >
-        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+          <div className="conflict-path-arrow" aria-hidden="true">
+            <IconArrowRight size={14} />
+          </div>
+
+          <div className="conflict-path-pill path-b">
+            <span className="side-badge badge-b">侧 B · 待迁入</span>
+            <span className="mono path-line" title={conflict.sideB}>
+              {conflict.sideB}
+            </span>
+            <button
+              type="button"
+              className="path-copy-btn"
+              title="复制侧 B 路径"
+              onClick={() => handleCopyPath(conflict.sideB, 'b')}
+            >
+              {copiedSide === 'b' ? <IconCheck size={12} /> : <IconCopy size={12} />}
+            </button>
+          </div>
+        </div>
+
+        <div className="conflict-skill-actions">
           {conflict.total > 1 ? (
             <span className="organize-action-pill type-replace_with_symlink">
-              合并轮次 {conflict.index || 1} / {conflict.total}
+              轮次 {conflict.index || 1} / {conflict.total}
             </span>
           ) : null}
           {conflict.userSkipped ? (
-            <span className="organize-action-pill type-skip">已手动跳过</span>
+            <span className="organize-action-pill type-skip">已跳过</span>
           ) : null}
-        </div>
 
-        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-          <button type="button" className="btn btn-sm" onClick={onSkip}>
-            跳过该技能
+          <button
+            type="button"
+            className={`btn btn-sm ${conflict.userSkipped ? 'btn-active' : ''}`}
+            onClick={onSkip}
+            title={conflict.userSkipped ? '取消跳过状态' : '在整理执行中跳过此技能'}
+          >
+            {conflict.userSkipped ? '已跳过此技能' : '跳过该技能'}
           </button>
-          <button type="button" className="btn btn-sm" onClick={onReset}>
-            重置当前决议
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={onReset}
+            title="清空当前技能的所有文件决议"
+          >
+            <IconRotateCcw size={12} />
+            <span>重置决议</span>
           </button>
           {canApplyRound ? (
             <button
               type="button"
-              className="btn btn-sm btn-primary"
+              className="btn btn-sm btn-primary conflict-apply-round-btn"
               disabled={applyingRound}
               onClick={onApplyRound}
             >
-              {applyingRound ? '应用中…' : '应用本轮合并（进入下一轮）'}
+              {applyingRound ? '应用中…' : '应用本轮合并 (进入下一轮)'}
             </button>
           ) : null}
         </div>
       </div>
 
+      {/* 主体双栏区域 */}
       <div className="conflict-layout">
+        {/* 左侧文件清单侧栏 */}
         <div className="conflict-file-list">
-          <div className="muted conflict-list-title">文件清单 ({files.length})</div>
-          <ul>
-            {files.map((file) => {
+          <div className="conflict-list-header">
+            <div className="list-title-row">
+              <span className="list-title">文件清单</span>
+              <span className="list-count-badge">{files.length}</span>
+            </div>
+
+            {/* 快速筛选分段控制器 */}
+            <div className="conflict-list-filter-bar">
+              <button
+                type="button"
+                className={`list-filter-tab ${fileFilter === 'all' ? 'is-active' : ''}`}
+                onClick={() => setFileFilter('all')}
+              >
+                全部 ({files.length})
+              </button>
+              <button
+                type="button"
+                className={`list-filter-tab ${fileFilter === 'diff' ? 'is-active' : ''}`}
+                onClick={() => setFileFilter('diff')}
+              >
+                差异 ({diffFiles.length})
+              </button>
+              {pendingFiles.length > 0 ? (
+                <button
+                  type="button"
+                  className={`list-filter-tab is-pending-tab ${
+                    fileFilter === 'pending' ? 'is-active' : ''
+                  }`}
+                  onClick={() => setFileFilter('pending')}
+                >
+                  待决 ({pendingFiles.length})
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <ul className="conflict-file-items">
+            {filteredFiles.map((file) => {
               const active = file.relativePath === selected?.relativePath
               const isDiff = file.status === 'both_diff'
+              const resolved = bothDiffResolved(file)
+
+              // 拆分路径与主文件名
+              const lastSlash = file.relativePath.lastIndexOf('/')
+              const dirPart = lastSlash >= 0 ? file.relativePath.slice(0, lastSlash + 1) : ''
+              const namePart = lastSlash >= 0 ? file.relativePath.slice(lastSlash + 1) : file.relativePath
+
               return (
                 <li key={file.relativePath}>
                   <button
                     type="button"
-                    className={conflictFileItemClass(active, file)}
+                    className={`conflict-file-item ${active ? 'active' : ''} ${
+                      isDiff ? (resolved ? 'is-diff-done' : 'is-diff') : 'is-non-diff'
+                    }`}
                     aria-current={active ? 'true' : undefined}
                     onClick={() => setSelectedRel(file.relativePath)}
                   >
-                    <span className="conflict-file-row">
-                      <span className="conflict-file-mark" aria-hidden="true" />
-                      <span className="mono">{file.relativePath}</span>
-                    </span>
-                    <span
-                      className={
-                        isDiff
-                          ? 'conflict-file-status'
-                          : 'conflict-file-status is-quiet'
-                      }
-                    >
-                      {FILE_STATUS_LABELS[file.status] ?? file.status}
-                      {conflictFileChoiceSuffix(file)}
-                    </span>
+                    <div className="conflict-file-main-row">
+                      <div className="file-icon-wrap" aria-hidden="true">
+                        {getConflictFileIcon(file.relativePath, file.isText)}
+                      </div>
+                      <div className="file-name-meta">
+                        {dirPart ? <span className="file-dir mono">{dirPart}</span> : null}
+                        <span className="file-basename mono">{namePart}</span>
+                      </div>
+                    </div>
+
+                    <div className="conflict-file-meta-row">
+                      {isDiff ? (
+                        resolved ? (
+                          <span className="file-badge is-resolved">
+                            <IconCheck size={10} />
+                            <span>
+                              {file.choice === 'keep_a'
+                                ? '保留侧 A'
+                                : file.choice === 'keep_b'
+                                  ? '保留侧 B'
+                                  : '手动混排'}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="file-badge is-pending">
+                            <span className="badge-dot" />
+                            <span>待决议</span>
+                          </span>
+                        )
+                      ) : file.status === 'both_same' ? (
+                        <span className="file-badge is-same">两侧相同</span>
+                      ) : file.status === 'only_a' ? (
+                        <span className="file-badge is-only-a">仅侧 A (保留)</span>
+                      ) : file.status === 'only_b' ? (
+                        <span className="file-badge is-only-b">仅侧 B (保留)</span>
+                      ) : (
+                        <span className="file-badge is-other">{file.status}</span>
+                      )}
+                    </div>
                   </button>
                 </li>
               )
             })}
+            {filteredFiles.length === 0 ? (
+              <li className="conflict-file-empty">无匹配文件</li>
+            ) : null}
           </ul>
         </div>
 
+        {/* 右侧比对与合并区 */}
         <div className="conflict-detail">
           {!selected ? (
-            <p className="muted">暂无冲突文件</p>
+            <div className="conflict-empty-pane">
+              <IconFile size={32} />
+              <p>请在左侧选择需要对比或审查的文件</p>
+            </div>
           ) : (
             <>
-              <div className="conflict-detail-head">
-                <span className="mono" style={{fontWeight: 700}}>
-                  {selected.relativePath}
-                </span>
-                <span className="muted" style={{fontSize: 12}}>
-                  {FILE_STATUS_LABELS[selected.status] ?? selected.status}
-                  {selected.isText ? '' : ' · 二进制文件'}
-                </span>
+              {/* 文件标题与类型条 */}
+              <div className="conflict-detail-header-card">
+                <div className="detail-header-left">
+                  <div className="detail-file-icon">
+                    {getConflictFileIcon(selected.relativePath, selected.isText)}
+                  </div>
+                  <div className="detail-title-info">
+                    <span className="detail-filename mono">{selected.relativePath}</span>
+                    <span className="detail-type-hint">
+                      {selected.isText ? '文本文件 · 支持逐行审查' : '二进制文件 · 支持版本选择'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="detail-header-right">
+                  {selected.status === 'both_diff' ? (
+                    bothDiffResolved(selected) ? (
+                      <span className="detail-resolved-pill">
+                        <IconCheck size={12} />
+                        <span>已完成决议</span>
+                      </span>
+                    ) : (
+                      <span className="detail-pending-pill">
+                        <span className="badge-dot" />
+                        <span>存在差异 · 待解决</span>
+                      </span>
+                    )
+                  ) : (
+                    <span className="detail-neutral-pill">
+                      {FILE_STATUS_LABELS[selected.status] ?? selected.status}
+                    </span>
+                  )}
+                </div>
               </div>
 
+              {/* 文本差异对比与合并 */}
               {needsChoice && selected.isText ? (
                 <>
                   {textError ? <div className="dialog-error">{textError}</div> : null}
                   {loadingTexts ? (
-                    <div style={{padding: 24, textAlign: 'center'}} className="muted">
-                      正在读取文件文本对比…
+                    <div className="conflict-loading-pane">
+                      <div className="spinner" />
+                      <span>正在读取双侧文件文本对比…</span>
                     </div>
                   ) : null}
                   {!loadingTexts && !textError ? (
@@ -2152,39 +2442,151 @@ function ConflictPanel({
                 </>
               ) : null}
 
+              {/* 二进制文件双版本选择卡片 */}
               {needsChoice && !selected.isText ? (
-                <div className="choice-bar" style={{padding: 16}}>
-                  <span className="muted">二进制文件不支持行级合并，请选择保留版本：</span>
-                  <label>
-                    <input
-                      type="radio"
-                      name={`choice-${conflict.skillId}-${selected.relativePath}`}
-                      checked={choice === 'keep_a'}
-                      disabled={conflict.userSkipped}
-                      onChange={() => onChoice(selected.relativePath, 'keep_a', '')}
-                    />
-                    <span>保留侧 A（源仓版）</span>
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name={`choice-${conflict.skillId}-${selected.relativePath}`}
-                      checked={choice === 'keep_b'}
-                      disabled={conflict.userSkipped}
-                      onChange={() => onChoice(selected.relativePath, 'keep_b', '')}
-                    />
-                    <span>保留侧 B（待迁入版）</span>
-                  </label>
+                <div className="binary-choice-container">
+                  <div className="binary-choice-banner">
+                    <IconAlertTriangle size={18} className="banner-icon" />
+                    <div className="banner-text">
+                      <span className="banner-title">二进制文件不支持行级合并</span>
+                      <span className="banner-sub">请选择最终整理时要保留的具体版本：</span>
+                    </div>
+                  </div>
+
+                  <div className="binary-cards-list">
+                    {/* 卡片 A */}
+                    <div
+                      className={`binary-version-card side-a ${
+                        choice === 'keep_a' ? 'is-selected' : ''
+                      } ${conflict.userSkipped ? 'is-disabled' : ''}`}
+                      onClick={() => {
+                        if (!conflict.userSkipped) {
+                          onChoice(selected.relativePath, 'keep_a', '')
+                        }
+                      }}
+                    >
+                      <div className="card-top">
+                        <span className="side-badge badge-a">侧 A · 源仓目标</span>
+                        {choice === 'keep_a' ? (
+                          <span className="selected-indicator">
+                            <IconCheck size={14} /> 已选中
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="card-main">
+                        <div className="card-icon-area" aria-hidden="true">
+                          <IconFileBinary size={24} />
+                        </div>
+                        <div className="card-info">
+                          <div className="card-name mono">{selected.relativePath}</div>
+                          <div className="card-path mono" title={conflict.sideA}>
+                            <span className="path-label">来源目录：</span>
+                            <span className="path-text">{conflict.sideA}</span>
+                          </div>
+                        </div>
+                        <div className="card-footer">
+                          <button
+                            type="button"
+                            className={`btn ${choice === 'keep_a' ? 'btn-primary' : ''}`}
+                            disabled={conflict.userSkipped}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!conflict.userSkipped) {
+                                onChoice(selected.relativePath, 'keep_a', '')
+                              }
+                            }}
+                          >
+                            {choice === 'keep_a' ? '保留侧 A（当前选择）' : '选择保留侧 A（源仓版）'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 卡片 B */}
+                    <div
+                      className={`binary-version-card side-b ${
+                        choice === 'keep_b' ? 'is-selected' : ''
+                      } ${conflict.userSkipped ? 'is-disabled' : ''}`}
+                      onClick={() => {
+                        if (!conflict.userSkipped) {
+                          onChoice(selected.relativePath, 'keep_b', '')
+                        }
+                      }}
+                    >
+                      <div className="card-top">
+                        <span className="side-badge badge-b">侧 B · 待迁入来源</span>
+                        {choice === 'keep_b' ? (
+                          <span className="selected-indicator">
+                            <IconCheck size={14} /> 已选中
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="card-main">
+                        <div className="card-icon-area" aria-hidden="true">
+                          <IconFileBinary size={24} />
+                        </div>
+                        <div className="card-info">
+                          <div className="card-name mono">{selected.relativePath}</div>
+                          <div className="card-path mono" title={conflict.sideB}>
+                            <span className="path-label">来源目录：</span>
+                            <span className="path-text">{conflict.sideB}</span>
+                          </div>
+                        </div>
+                        <div className="card-footer">
+                          <button
+                            type="button"
+                            className={`btn ${choice === 'keep_b' ? 'btn-primary' : ''}`}
+                            disabled={conflict.userSkipped}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!conflict.userSkipped) {
+                                onChoice(selected.relativePath, 'keep_b', '')
+                              }
+                            }}
+                          >
+                            {choice === 'keep_b' ? '保留侧 B（当前选择）' : '选择保留侧 B（待迁入版）'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
+              {/* 无需手动处理的文件说明卡片 */}
               {!needsChoice ? (
-                <div style={{padding: '24px 16px'}} className="muted">
-                  {selected.status === 'only_a'
-                    ? '该文件仅存在于源仓侧，将默认保留，无需选择。'
-                    : selected.status === 'only_b'
-                      ? '该文件仅存在于待迁入侧，将默认保留并归入源仓，无需选择。'
-                      : '两侧文件内容完全相同，无需手动合并。'}
+                <div className="conflict-notice-pane">
+                  {selected.status === 'both_same' ? (
+                    <div className="notice-card notice-same">
+                      <div className="notice-icon-wrap" aria-hidden="true">
+                        <IconCheckCircle2 size={32} />
+                      </div>
+                      <h4 className="notice-title">两侧文件内容完全相同</h4>
+                      <p className="notice-desc">
+                        源仓目标与待迁入来源在此文件的字节内容完全一致，整理时无需任何手动合并抉择，系统将自动保留源仓既有文件。
+                      </p>
+                    </div>
+                  ) : selected.status === 'only_a' ? (
+                    <div className="notice-card notice-only-a">
+                      <div className="notice-icon-wrap" aria-hidden="true">
+                        <IconFile size={32} />
+                      </div>
+                      <h4 className="notice-title">仅存在于源仓目标 (侧 A)</h4>
+                      <p className="notice-desc">
+                        待迁入来源未包含此文件，系统在整理时将默认保留源仓侧的原有文件，不产生内容覆盖。
+                      </p>
+                    </div>
+                  ) : selected.status === 'only_b' ? (
+                    <div className="notice-card notice-only-b">
+                      <div className="notice-icon-wrap" aria-hidden="true">
+                        <IconFolderPlus size={32} />
+                      </div>
+                      <h4 className="notice-title">仅存在于待迁入侧 (侧 B)</h4>
+                      <p className="notice-desc">
+                        源仓中尚无此文件，整理时将默认作为新增文件自动归入源仓，无需额外合并。
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </>
