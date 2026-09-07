@@ -417,5 +417,53 @@ export function IconRotateCcw(props: IconProps) {
   )
 }
 
+/** 密钥 / Key */
+export function IconKey(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m21 2-2 2m-1.5 1.5L14 9a5.5 5.5 0 1 0 4.2 4.2l3.8-3.8-2-2 2-2-1-1Z" />
+      <circle cx="7.5" cy="16.5" r="1.5" />
+    </Icon>
+  )
+}
+
+/** 链接 / URL */
+export function IconLink(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </Icon>
+  )
+}
+
+/** 芯片 / 模型 ID */
+export function IconCpu(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M9 1v3" />
+      <path d="M15 1v3" />
+      <path d="M9 20v3" />
+      <path d="M15 20v3" />
+      <path d="M20 9h3" />
+      <path d="M20 14h3" />
+      <path d="M1 9h3" />
+      <path d="M1 14h3" />
+    </Icon>
+  )
+}
+
+/** 连通性 / 网络活动 */
+export function IconActivity(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    </Icon>
+  )
+}
+
+
 
 

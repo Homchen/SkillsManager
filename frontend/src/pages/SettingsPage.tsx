@@ -18,17 +18,22 @@ import {
   RevealInFolder,
   SaveConfig,
   SelectDirectory,
+  TranslateSkillDescription,
 } from '../../wailsjs/go/main/App'
 import type {config} from '../../wailsjs/go/models'
 import {
+  IconActivity,
   IconCheck,
   IconCopy,
+  IconCpu,
   IconDownload,
   IconExternalLink,
   IconEye,
   IconEyeOff,
   IconFolderOpen,
+  IconKey,
   IconLanguages,
+  IconLink,
   IconLock,
   IconPencil,
   IconPlus,
@@ -103,20 +108,30 @@ const TRANSLATION_ENGINES = [
     label: '微软翻译（移动端通道）',
     desc: '开箱即用，无需配置 API Key，稳定快捷',
     badge: '推荐',
+    badgeType: 'recommend',
   },
   {
     value: 'microsoft',
     label: '微软翻译（Azure Key）',
     desc: '需 Azure 认知服务订阅密钥，企业级稳定',
     badge: '官方',
+    badgeType: 'official',
   },
   {
     value: 'openai_compatible',
     label: 'AI 翻译（OpenAI 兼容）',
     desc: '支持 OpenAI、DeepSeek、Ollama 等通用端点',
     badge: 'LLM',
+    badgeType: 'llm',
   },
 ]
+
+function getTemperatureSemantic(temp: number) {
+  if (temp <= 0.2) return {label: '严谨专注 (推荐翻译)', color: '#059669', bg: '#ecfdf5'}
+  if (temp <= 0.5) return {label: '平衡适中', color: '#2563eb', bg: '#eff6ff'}
+  if (temp <= 0.8) return {label: '多样通顺', color: '#7c3aed', bg: '#f5f3ff'}
+  return {label: '发散创意', color: '#d97706', bg: '#fffbeb'}
+}
 
 type Props = {
   onReplayOnboarding?: () => void
@@ -208,6 +223,14 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
   const [showOpenAIKey, setShowOpenAIKey] = useState(false)
   // 复制反馈标记
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+
+  // 大模型/翻译端点连通性测试状态
+  const [testingConnection, setTestingConnection] = useState(false)
+  const [testResult, setTestResult] = useState<{
+    type: 'success' | 'error'
+    message: string
+    latencyMs?: number
+  } | null>(null)
 
   useEffect(() => {
     if (!openTranslationSelect) return
@@ -546,6 +569,40 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
     }
   }
 
+  // 测试 OpenAI 兼容端点或已选翻译引擎连通性
+  async function handleTestConnection(): Promise<void> {
+    if (testingConnection || !cfg) return
+    setTestingConnection(true)
+    setTestResult(null)
+    const startTime = Date.now()
+    try {
+      if (dirty) {
+        const saved = await handleSave()
+        if (!saved) {
+          setTestingConnection(false)
+          return
+        }
+      }
+      const res = await TranslateSkillDescription('Hello world')
+      const elapsed = Date.now() - startTime
+      setTestResult({
+        type: 'success',
+        message: `连通测试成功！响应: "${res.trim()}"`,
+        latencyMs: elapsed,
+      })
+    } catch (err: unknown) {
+      const elapsed = Date.now() - startTime
+      const errMsg = err instanceof Error ? err.message : String(err)
+      setTestResult({
+        type: 'error',
+        message: errMsg || '端点连接失败，请检查网络、Base URL 或 API Key',
+        latencyMs: elapsed,
+      })
+    } finally {
+      setTestingConnection(false)
+    }
+  }
+
   // 监听 Ctrl+S / Cmd+S 快捷保存
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -753,8 +810,9 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
             </div>
           ) : (
             <span className="settings-synced-pill">
-              <span className="settings-synced-dot" aria-hidden="true" />
-              <IconCheck size={14} />
+              <span className="settings-synced-icon-wrap" aria-hidden="true">
+                <IconCheck size={13} />
+              </span>
               <span>配置已同步</span>
             </span>
           )}
@@ -1322,7 +1380,10 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
 
                 {/* 引擎切换卡片组 */}
                 <div className="settings-field-box">
-                  <span className="settings-field-label">选择默认翻译引擎</span>
+                  <div className="settings-field-label-group">
+                    <span className="settings-field-label">选择默认翻译引擎</span>
+                    <span className="settings-field-hint">点击切换不同通道，支持免配轻量通道、企业级 Azure 及通用大模型</span>
+                  </div>
                   <div className="settings-engine-grid">
                     {TRANSLATION_ENGINES.map((engine) => {
                       const isSelected = translationEngine === engine.value
@@ -1342,8 +1403,12 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                           </div>
                           <div className="settings-engine-info">
                             <div className="settings-engine-title-row">
-                              <strong>{engine.label}</strong>
-                              <span className="settings-engine-badge">{engine.badge}</span>
+                              <span className="settings-engine-title" title={engine.label}>
+                                {engine.label}
+                              </span>
+                              <span className={`settings-engine-badge badge-${engine.badgeType}`}>
+                                {engine.badge}
+                              </span>
                             </div>
                             <p className="settings-engine-desc">{engine.desc}</p>
                           </div>
@@ -1371,12 +1436,15 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                         )
                       }
                     >
-                      <span>
-                        {SKILL_LANGUAGES.find(
-                          (l) => l.value === (cfg.translationTargetLanguage ?? 'zh-CN'),
-                        )?.label ?? (cfg.translationTargetLanguage ?? 'zh-CN')}
-                      </span>
-                      <span className="settings-select-arrow" aria-hidden="true" />
+                      <div className="settings-select-value-wrap">
+                        <IconLanguages size={15} className="settings-select-prefix-icon" />
+                        <span>
+                          {SKILL_LANGUAGES.find(
+                            (l) => l.value === (cfg.translationTargetLanguage ?? 'zh-CN'),
+                          )?.label ?? (cfg.translationTargetLanguage ?? 'zh-CN')}
+                        </span>
+                      </div>
+                      <span className={`settings-select-arrow ${openTranslationSelect === 'targetLanguage' ? 'is-expanded' : ''}`} aria-hidden="true" />
                     </button>
                     {openTranslationSelect === 'targetLanguage' ? (
                       <ul className="field-select-menu" role="listbox">
@@ -1440,20 +1508,23 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                     >
                       <span className="settings-field-label">Subscription Key 订阅密钥</span>
                       <div className="settings-password-wrap">
-                        <input
-                          type={showMicrosoftKey ? 'text' : 'password'}
-                          autoComplete="off"
-                          className="settings-text-input"
-                          value={cfg.microsoftTranslatorKey ?? ''}
-                          onChange={(e) => {
-                            setCfg({
-                              ...cfg,
-                              microsoftTranslatorKey: e.target.value,
-                            } as AppConfig)
-                            setStatus('')
-                          }}
-                          placeholder="输入 Azure 32 位订阅密钥"
-                        />
+                        <div className="settings-input-with-icon flex-1">
+                          <IconKey size={16} className="settings-input-prefix-icon" />
+                          <input
+                            type={showMicrosoftKey ? 'text' : 'password'}
+                            autoComplete="off"
+                            className="settings-text-input with-prefix"
+                            value={cfg.microsoftTranslatorKey ?? ''}
+                            onChange={(e) => {
+                              setCfg({
+                                ...cfg,
+                                microsoftTranslatorKey: e.target.value,
+                              } as AppConfig)
+                              setStatus('')
+                            }}
+                            placeholder="输入 Azure 32 位订阅密钥"
+                          />
+                        </div>
                         <button
                           type="button"
                           className="settings-eye-btn"
@@ -1505,15 +1576,19 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                       data-settings-field="openAIBaseURL"
                     >
                       <span className="settings-field-label">接口服务地址（Base URL）</span>
-                      <input
-                        className="settings-text-input"
-                        value={cfg.openAIBaseURL ?? 'https://api.openai.com/v1'}
-                        onChange={(e) => {
-                          setCfg({...cfg, openAIBaseURL: e.target.value} as AppConfig)
-                          setStatus('')
-                        }}
-                        placeholder="https://api.openai.com/v1"
-                      />
+                      <div className="settings-input-with-icon">
+                        <IconLink size={16} className="settings-input-prefix-icon" />
+                        <input
+                          className="settings-text-input with-prefix"
+                          value={cfg.openAIBaseURL ?? 'https://api.openai.com/v1'}
+                          onChange={(e) => {
+                            setCfg({...cfg, openAIBaseURL: e.target.value} as AppConfig)
+                            setStatus('')
+                            setTestResult(null)
+                          }}
+                          placeholder="https://api.openai.com/v1"
+                        />
+                      </div>
                     </label>
 
                     <label
@@ -1521,15 +1596,19 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                       data-settings-field="openAIModel"
                     >
                       <span className="settings-field-label">模型标识（Model ID）</span>
-                      <input
-                        className="settings-text-input"
-                        value={cfg.openAIModel ?? 'gpt-5.6-terra'}
-                        onChange={(e) => {
-                          setCfg({...cfg, openAIModel: e.target.value} as AppConfig)
-                          setStatus('')
-                        }}
-                        placeholder="例如 deepseek-chat, gpt-4o-mini"
-                      />
+                      <div className="settings-input-with-icon">
+                        <IconCpu size={16} className="settings-input-prefix-icon" />
+                        <input
+                          className="settings-text-input with-prefix"
+                          value={cfg.openAIModel ?? 'gpt-5.6-terra'}
+                          onChange={(e) => {
+                            setCfg({...cfg, openAIModel: e.target.value} as AppConfig)
+                            setStatus('')
+                            setTestResult(null)
+                          }}
+                          placeholder="例如 deepseek-chat, gpt-4o-mini"
+                        />
+                      </div>
                     </label>
                   </div>
 
@@ -1540,17 +1619,21 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                     >
                       <span className="settings-field-label">API 访问密钥（API Key）</span>
                       <div className="settings-password-wrap">
-                        <input
-                          type={showOpenAIKey ? 'text' : 'password'}
-                          autoComplete="off"
-                          className="settings-text-input"
-                          value={cfg.openAIAPIKey ?? ''}
-                          onChange={(e) => {
-                            setCfg({...cfg, openAIAPIKey: e.target.value} as AppConfig)
-                            setStatus('')
-                          }}
-                          placeholder="sk-…"
-                        />
+                        <div className="settings-input-with-icon flex-1">
+                          <IconKey size={16} className="settings-input-prefix-icon" />
+                          <input
+                            type={showOpenAIKey ? 'text' : 'password'}
+                            autoComplete="off"
+                            className="settings-text-input with-prefix"
+                            value={cfg.openAIAPIKey ?? ''}
+                            onChange={(e) => {
+                              setCfg({...cfg, openAIAPIKey: e.target.value} as AppConfig)
+                              setStatus('')
+                              setTestResult(null)
+                            }}
+                            placeholder="sk-…"
+                          />
+                        </div>
                         <button
                           type="button"
                           className="settings-eye-btn"
@@ -1562,49 +1645,114 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                       </div>
                     </label>
 
-                    <label
+                    <div
                       className={fieldClass('openAITemperature', 'settings-field-box flex-1')}
                       data-settings-field="openAITemperature"
                     >
-                      <div className="settings-slider-label-row">
-                        <span className="settings-field-label">采样温度（Temperature）</span>
-                        <span className="settings-slider-value-tag">
-                          {Number.isFinite(cfg.openAITemperature)
-                            ? Number(cfg.openAITemperature).toFixed(1)
-                            : '0.2'}
-                        </span>
+                      {(() => {
+                        const curTemp = Number.isFinite(cfg.openAITemperature)
+                          ? Number(cfg.openAITemperature)
+                          : 0.2
+                        const semantic = getTemperatureSemantic(curTemp)
+                        return (
+                          <>
+                            <div className="settings-slider-label-row">
+                              <span className="settings-field-label">采样温度（Temperature）</span>
+                              <div className="settings-slider-badge-wrap">
+                                <span
+                                  className="settings-slider-semantic-tag"
+                                  style={{
+                                    color: semantic.color,
+                                    backgroundColor: semantic.bg,
+                                  }}
+                                >
+                                  {semantic.label}
+                                </span>
+                                <span className="settings-slider-value-tag">
+                                  {curTemp.toFixed(2)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="settings-slider-card">
+                              <div className="settings-temperature-slider-wrap">
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  className="settings-range-slider"
+                                  style={
+                                    {
+                                      '--slider-progress': `${Math.min(100, Math.max(0, curTemp * 100))}%`,
+                                    } as React.CSSProperties
+                                  }
+                                  value={curTemp}
+                                  onChange={(e) => {
+                                    setCfg({
+                                      ...cfg,
+                                      openAITemperature: Number(e.target.value),
+                                    } as AppConfig)
+                                    setStatus('')
+                                    setTestResult(null)
+                                  }}
+                                />
+                              </div>
+                              <div className="settings-slider-scale-row">
+                                <span className="settings-slider-scale-mark">0.0 精确严谨</span>
+                                <span className="settings-slider-scale-mark">0.5</span>
+                                <span className="settings-slider-scale-mark">1.0 创意发散</span>
+                              </div>
+                            </div>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* 连通性测试操作行 */}
+                  <div className="settings-test-connection-panel">
+                    <div className="settings-test-left">
+                      <button
+                        type="button"
+                        className={`btn btn-secondary settings-test-btn ${testingConnection ? 'is-loading' : ''}`}
+                        disabled={testingConnection}
+                        onClick={() => void handleTestConnection()}
+                      >
+                        <IconActivity size={15} />
+                        <span>{testingConnection ? '正在测试连通性…' : '测试端点连接'}</span>
+                      </button>
+                      <span className="settings-test-hint">
+                        调用当前端点翻译测试短语，验证 API Key 与网络连接是否有效
+                      </span>
+                    </div>
+
+                    {testResult ? (
+                      <div className={`settings-test-badge is-${testResult.type}`}>
+                        {testResult.type === 'success' ? (
+                          <IconCheck size={14} />
+                        ) : (
+                          <IconShieldAlert size={14} />
+                        )}
+                        <span className="settings-test-msg">{testResult.message}</span>
+                        {testResult.latencyMs !== undefined ? (
+                          <span className="settings-test-latency">({testResult.latencyMs}ms)</span>
+                        ) : null}
                       </div>
-                      <div className="settings-temperature-slider-wrap">
-                        <input
-                          type="range"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          className="settings-range-slider"
-                          value={
-                            Number.isFinite(cfg.openAITemperature)
-                              ? cfg.openAITemperature
-                              : 0.2
-                          }
-                          onChange={(e) => {
-                            setCfg({
-                              ...cfg,
-                              openAITemperature: Number(e.target.value),
-                            } as AppConfig)
-                            setStatus('')
-                          }}
-                        />
-                      </div>
-                    </label>
+                    ) : null}
                   </div>
 
                   {/* 安全存储提示卡片 */}
                   <div className="settings-security-notice">
-                    <IconLock size={16} className="settings-security-icon" />
+                    <div className="settings-security-icon-pill">
+                      <IconLock size={16} />
+                    </div>
                     <div className="settings-security-content">
-                      <strong>本地安全存储保障</strong>
+                      <div className="settings-security-title-row">
+                        <strong>本地安全存储保障</strong>
+                        <span className="settings-security-tag">仅限本地</span>
+                      </div>
                       <p>
-                        翻译接口凭证将单独写入本地 <code>~/.skillsmanager/.env</code> 文件，不会明文存入通用配置文件，也绝不会上传至任何第三方云端。
+                        翻译接口凭证将单独写入本地 <code>~/.skillsmanager/.env</code> 文件，绝不随通用配置同步，也不会明文上传至任何第三方云端。
                       </p>
                     </div>
                   </div>
