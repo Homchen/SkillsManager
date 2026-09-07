@@ -5,6 +5,8 @@ import AutoScrollText from '../components/AutoScrollText'
 import UsageTrendChart from '../components/UsageTrendChart'
 import {
   IconActivity,
+  IconMaximize,
+  IconMinimize,
   IconPencil,
   IconRefresh,
   IconSearch,
@@ -54,6 +56,7 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [smoothCurve, setSmoothCurve] = useState(true)
+  const [chartFullscreen, setChartFullscreen] = useState(false)
   const {toast, showToast, dismissToast} = useAppToast()
 
   const load = useCallback(async () => {
@@ -92,8 +95,20 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
   useEffect(() => {
     if (!active) {
       dismissToast()
+      setChartFullscreen(false)
     }
   }, [active, dismissToast])
+
+  useEffect(() => {
+    if (!chartFullscreen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setChartFullscreen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [chartFullscreen])
 
   const skills = useMemo(() => summary?.skills ?? [], [summary])
 
@@ -540,6 +555,16 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
                     </button>
                   </>
                 ) : null}
+
+                <button
+                  type="button"
+                  className="btn-icon-subtle"
+                  onClick={() => setChartFullscreen(true)}
+                  title="大屏全屏查看趋势图"
+                  aria-label="大屏全屏查看趋势图"
+                >
+                  <IconMaximize size={15} />
+                </button>
               </div>
             </div>
 
@@ -575,6 +600,139 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
           </div>
         </section>
       </div>
+
+      {/* 大屏全屏查看模态框 */}
+      {chartFullscreen ? (
+        <div
+          className="dialog-backdrop usage-fullscreen-backdrop"
+          role="presentation"
+          onClick={() => setChartFullscreen(false)}
+        >
+          <div
+            className="usage-fullscreen-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="大屏趋势图"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="usage-fullscreen-header">
+              <div className="usage-trend-title-block">
+                <div className="usage-trend-title-line">
+                  <h3 className="usage-fullscreen-title">
+                    {selected ? (
+                      <>
+                        <AutoScrollText
+                          text={selected.name || selected.id}
+                          className="usage-trend-highlight"
+                          title={selected.name || selected.id}
+                        />
+                        <span className="usage-trend-tail">的调用趋势 (全屏大屏)</span>
+                      </>
+                    ) : (
+                      '全体技能调用趋势 (全屏大屏)'
+                    )}
+                  </h3>
+                  {selected ? (
+                    <span className="usage-tag-share">占区间总量 {selectedShare}</span>
+                  ) : null}
+                </div>
+                <p
+                  className="muted usage-trend-subtitle"
+                  title={
+                    selected
+                      ? `技能 ID: ${selected.id} · ${rangeLabel}累计使用 ${selectedScore} 次`
+                      : `展示 ${rangeLabel}内全体技能的日度使用活跃走势`
+                  }
+                >
+                  {selected
+                    ? `技能 ID: ${selected.id} · ${rangeLabel}累计使用 ${selectedScore} 次`
+                    : `展示 ${rangeLabel}内全体技能的日度使用活跃走势`}
+                </p>
+              </div>
+
+              <div className="usage-trend-actions">
+                <button
+                  type="button"
+                  className={`btn-subtle ${smoothCurve ? 'is-active' : ''}`}
+                  onClick={() => setSmoothCurve(!smoothCurve)}
+                  title={smoothCurve ? '切换为折线视图' : '切换为平滑曲线视图'}
+                >
+                  {smoothCurve ? '平滑曲线' : '折线模式'}
+                </button>
+
+                {selected ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-ghost usage-btn-back"
+                      onClick={() => setSelectedId(null)}
+                      title="清除技能选中，返回查看全体趋势"
+                    >
+                      查看全体
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary usage-btn-edit"
+                      onClick={() => {
+                        setChartFullscreen(false)
+                        onOpenEditor(selected.id)
+                      }}
+                      title="在技能编辑器中打开该技能"
+                    >
+                      <IconPencil size={14} />
+                      <span>打开编辑</span>
+                    </button>
+                  </>
+                ) : null}
+
+                <button
+                  type="button"
+                  className="btn-icon-subtle"
+                  onClick={() => setChartFullscreen(false)}
+                  title="退出全屏 (ESC)"
+                  aria-label="退出全屏"
+                >
+                  <IconMinimize size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="usage-fullscreen-body">
+              <UsageTrendChart
+                points={trendPoints}
+                smooth={smoothCurve}
+                skillName={selected ? (selected.name || selected.id) : '全体调用'}
+                emptyLabel={
+                  summary?.hasAnyRecord ? '所选时段内暂无调用记录' : '尚未产生调用数据'
+                }
+                isFullscreen={true}
+              />
+            </div>
+
+            <div className="usage-chart-footer-stats usage-fullscreen-footer">
+              <div className="usage-stat-chip">
+                <span className="muted">时段总计:</span>
+                <strong>
+                  {trendPoints.reduce((acc, p) => acc + p.count, 0).toLocaleString()} 次
+                </strong>
+              </div>
+              <div className="usage-stat-chip">
+                <span className="muted">覆盖天数:</span>
+                <strong>{trendPoints.length} 天</strong>
+              </div>
+              <div className="usage-stat-chip">
+                <span className="muted">最高单日:</span>
+                <strong>
+                  {Math.max(0, ...trendPoints.map((p) => p.count)).toLocaleString()} 次
+                </strong>
+              </div>
+              <div className="usage-stat-chip muted" style={{marginLeft: 'auto'}}>
+                <span>按 ESC 或点击右上角退出全屏</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

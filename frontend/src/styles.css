@@ -6151,6 +6151,28 @@ body.is-marquee-selecting * {
   background: color-mix(in srgb, var(--accent) 6%, var(--surface));
 }
 
+.btn-icon-subtle {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-icon-subtle:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 30%, var(--border));
+  background: color-mix(in srgb, var(--text) 4%, var(--surface));
+}
+
 /* 图表容器 */
 .usage-chart-wrap {
   position: relative;
@@ -6159,6 +6181,15 @@ body.is-marquee-selecting * {
   display: flex;
   flex-direction: column;
   padding: 14px 18px 8px 14px;
+}
+
+.usage-chart-wrap.is-fullscreen {
+  padding: 16px 24px 12px 20px;
+  height: 100%;
+}
+
+.usage-chart-wrap.is-fullscreen .usage-chart-svg-container {
+  min-height: 380px;
 }
 
 .usage-chart-header-sub {
@@ -6423,6 +6454,75 @@ body.is-marquee-selecting * {
   color: var(--text);
 }
 
+/* 趋势图全屏模态框 */
+.usage-fullscreen-backdrop {
+  z-index: 150;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  padding: 24px;
+}
+
+.usage-fullscreen-dialog {
+  width: 100%;
+  max-width: 1280px;
+  height: 90vh;
+  max-height: 840px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28), 0 4px 16px rgba(15, 23, 42, 0.1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: usageModalZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes usageModalZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.usage-fullscreen-header {
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+  background: var(--surface);
+}
+
+.usage-fullscreen-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.usage-fullscreen-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+
+.usage-fullscreen-footer {
+  padding: 12px 24px;
+}
+
 /* 响应式适配 */
 @media (max-width: 1100px) {
   .usage-kpi-grid {
@@ -6469,6 +6569,21 @@ body.is-marquee-selecting * {
   .usage-controls {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .usage-fullscreen-backdrop {
+    padding: 8px;
+  }
+
+  .usage-fullscreen-dialog {
+    height: 96vh;
+    max-height: none;
+    border-radius: 10px;
+  }
+
+  .usage-fullscreen-header {
+    padding: 10px 14px;
+    gap: 8px;
   }
 }
 

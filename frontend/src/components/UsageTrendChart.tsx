@@ -10,6 +10,7 @@ type Props = {
   showAverage?: boolean
   showPeak?: boolean
   skillName?: string
+  isFullscreen?: boolean
 }
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'] as const
@@ -43,13 +44,16 @@ function buildYScale(rawMax: number): {yMax: number; ticks: number[]} {
   return {yMax, ticks}
 }
 
-/** 按点数动态选取 X 轴标签索引：≤7 全显，约 30 天 5 个，更长 7 个，强制含首尾。 */
-function xLabelIndexes(length: number): number[] {
+/** 按点数动态选取 X 轴标签索引：≤7 全显，约 30 天 5 个，更长 7 个，全屏大屏下适当增加显示密度，强制含首尾。 */
+function xLabelIndexes(length: number, isFullscreen = false): number[] {
   if (length <= 0) return []
   if (length === 1) return [0]
   if (length <= 7) return Array.from({length}, (_, i) => i)
 
-  const count = length <= 35 ? 5 : 7
+  let count = length <= 35 ? 5 : 7
+  if (isFullscreen) {
+    count = length <= 14 ? length : length <= 35 ? 9 : Math.min(15, Math.ceil(length / 6) + 1)
+  }
   const indexes = new Set<number>([0, length - 1])
   for (let i = 1; i < count - 1; i++) {
     indexes.add(Math.round((i / (count - 1)) * (length - 1)))
@@ -92,17 +96,18 @@ export default function UsageTrendChart({
   showAverage = true,
   showPeak = true,
   skillName,
+  isFullscreen = false,
 }: Props) {
   const chartId = useId().replace(/:/g, '')
   const svgRef = useRef<SVGSVGElement>(null)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
 
-  const width = 800
-  const height = 340
-  const padL = 46
-  const padR = 24
-  const padT = 24
-  const padB = 32
+  const width = isFullscreen ? 1200 : 800
+  const height = isFullscreen ? 540 : 340
+  const padL = isFullscreen ? 54 : 46
+  const padR = isFullscreen ? 28 : 24
+  const padT = isFullscreen ? 30 : 24
+  const padB = isFullscreen ? 36 : 32
   const innerW = width - padL - padR
   const innerH = height - padT - padB
   const axisY = padT + innerH
@@ -160,7 +165,10 @@ export default function UsageTrendChart({
   // 均值 Y 坐标
   const avgY = padT + innerH - (average / yMax) * innerH
 
-  const labelIndexes = useMemo(() => xLabelIndexes(coords.length), [coords.length])
+  const labelIndexes = useMemo(
+    () => xLabelIndexes(coords.length, isFullscreen),
+    [coords.length, isFullscreen],
+  )
   const crossesYear = useMemo(() => new Set(coords.map((c) => yearOf(c.date))).size > 1, [coords])
   const showWeekday = coords.length > 0 && coords.length <= 7
 
@@ -196,7 +204,10 @@ export default function UsageTrendChart({
   const diffFromPrev = activeCoord && prevCoord ? activeCoord.count - prevCoord.count : null
 
   return (
-    <div className="usage-chart-wrap" onPointerLeave={handlePointerLeave}>
+    <div
+      className={`usage-chart-wrap ${isFullscreen ? 'is-fullscreen' : ''}`}
+      onPointerLeave={handlePointerLeave}
+    >
       <div className="usage-chart-header-sub">
         <span className="usage-chart-unit-tag">单位：次</span>
         {hasSignal && average > 0 && showAverage ? (
@@ -293,13 +304,13 @@ export default function UsageTrendChart({
               ) : null}
 
               {/* 静态离散点（少量点时全部显示，大量点时只在激活或悬浮显示） */}
-              {coords.length <= 15
+              {coords.length <= (isFullscreen ? 35 : 15)
                 ? coords.map((c) => (
                     <circle
                       key={c.date}
                       cx={c.x}
                       cy={c.y}
-                      r={3}
+                      r={isFullscreen ? 3.5 : 3}
                       className="usage-chart-dot"
                     />
                   ))
