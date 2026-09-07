@@ -20,8 +20,32 @@ import {
   SelectDirectory,
 } from '../../wailsjs/go/main/App'
 import type {config} from '../../wailsjs/go/models'
-import {IconShieldAlert, IconShieldCheck} from '../components/icons'
+import {
+  IconCheck,
+  IconCopy,
+  IconDownload,
+  IconExternalLink,
+  IconEye,
+  IconEyeOff,
+  IconFolderOpen,
+  IconLanguages,
+  IconLock,
+  IconPencil,
+  IconPlus,
+  IconRefresh,
+  IconRotateCcw,
+  IconSave,
+  IconShield,
+  IconShieldAlert,
+  IconShieldCheck,
+  IconSliders,
+  IconSparkles,
+  IconTrash,
+  IconWrench,
+  IconX,
+} from '../components/icons'
 import {SKILL_LANGUAGES} from '../lib/languages'
+import {getToolBadge} from '../lib/toolBadge'
 import {logClientWarn} from '../lib/clientLog'
 import {
   findSettingsSaveIssue,
@@ -39,10 +63,59 @@ type AppConfig = config.Config
 type ToolMapping = config.ToolMapping
 type TranslationSelect = 'engine' | 'targetLanguage' | null
 
+export type SettingsTabId = 'general' | 'tools' | 'translation' | 'system'
+
+const SETTINGS_TABS: Array<{
+  id: SettingsTabId
+  label: string
+  subtitle: string
+  icon: (props: {size?: number; className?: string}) => React.JSX.Element
+}> = [
+  {
+    id: 'general',
+    label: '常规与源仓',
+    subtitle: '核心源仓路径、数据安全与全局策略',
+    icon: IconSliders,
+  },
+  {
+    id: 'tools',
+    label: '工具生态',
+    subtitle: '配置与监控各 Agent 客户端的技能目录',
+    icon: IconWrench,
+  },
+  {
+    id: 'translation',
+    label: 'AI 与翻译',
+    subtitle: '翻译引擎选择、大模型接口与凭据安全',
+    icon: IconLanguages,
+  },
+  {
+    id: 'system',
+    label: '系统与诊断',
+    subtitle: '管理员权限管理、调试日志与重温引导',
+    icon: IconShield,
+  },
+]
+
 const TRANSLATION_ENGINES = [
-  {value: 'microsoft_android', label: '微软翻译（无需 Key）'},
-  {value: 'microsoft', label: '微软翻译（Azure Key）'},
-  {value: 'openai_compatible', label: 'AI 翻译（OpenAI 兼容）'},
+  {
+    value: 'microsoft_android',
+    label: '微软翻译（移动端通道）',
+    desc: '开箱即用，无需配置 API Key，稳定快捷',
+    badge: '推荐',
+  },
+  {
+    value: 'microsoft',
+    label: '微软翻译（Azure Key）',
+    desc: '需 Azure 认知服务订阅密钥，企业级稳定',
+    badge: '官方',
+  },
+  {
+    value: 'openai_compatible',
+    label: 'AI 翻译（OpenAI 兼容）',
+    desc: '支持 OpenAI、DeepSeek、Ollama 等通用端点',
+    badge: 'LLM',
+  },
 ]
 
 type Props = {
@@ -92,10 +165,24 @@ function configSnapshot(cfg: AppConfig): string {
   })
 }
 
+function getFieldTab(field: SettingsFieldId): SettingsTabId {
+  if (field === 'hubPath' || field === 'trashRetentionDays') return 'general'
+  if (field.startsWith('tool:')) return 'tools'
+  if (
+    field.startsWith('translation') ||
+    field.startsWith('microsoft') ||
+    field.startsWith('openAI')
+  ) {
+    return 'translation'
+  }
+  return 'general'
+}
+
 const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage(
   {onReplayOnboarding},
   ref,
 ) {
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('general')
   const [cfg, setCfg] = useState<AppConfig | null>(null)
   const [savedSnapshot, setSavedSnapshot] = useState('')
   const [elevated, setElevated] = useState<boolean | null>(null)
@@ -105,8 +192,6 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editingToolIndex, setEditingToolIndex] = useState<number | null>(null)
-  const [openToolMenuIndex, setOpenToolMenuIndex] = useState<number | null>(null)
-  const toolMenuRef = useRef<HTMLDivElement | null>(null)
   const [openTranslationSelect, setOpenTranslationSelect] = useState<TranslationSelect>(null)
   const translationSelectRef = useRef<HTMLDivElement | null>(null)
   const [exportingToolId, setExportingToolId] = useState<string | null>(null)
@@ -118,21 +203,19 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
   const [highlightField, setHighlightField] = useState<SettingsFieldId | null>(null)
   const [highlightTick, setHighlightTick] = useState(0)
 
-  useEffect(() => {
-    if (openToolMenuIndex === null) return
-    const onDoc = (ev: MouseEvent) => {
-      if (toolMenuRef.current && !toolMenuRef.current.contains(ev.target as Node)) {
-        setOpenToolMenuIndex(null)
-      }
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [openToolMenuIndex])
+  // 密码显示/隐藏状态
+  const [showMicrosoftKey, setShowMicrosoftKey] = useState(false)
+  const [showOpenAIKey, setShowOpenAIKey] = useState(false)
+  // 复制反馈标记
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (!openTranslationSelect) return
     const onDoc = (ev: MouseEvent) => {
-      if (translationSelectRef.current && !translationSelectRef.current.contains(ev.target as Node)) {
+      if (
+        translationSelectRef.current &&
+        !translationSelectRef.current.contains(ev.target as Node)
+      ) {
         setOpenTranslationSelect(null)
       }
     }
@@ -143,6 +226,43 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
   const dirty = useMemo(() => {
     if (!cfg || !savedSnapshot) return false
     return configSnapshot(cfg) !== savedSnapshot
+  }, [cfg, savedSnapshot])
+
+  // 各分类未保存状态判断
+  const tabDirtyMap = useMemo(() => {
+    if (!cfg || !savedSnapshot) return {}
+    try {
+      const snap = JSON.parse(savedSnapshot) as Record<string, unknown>
+      const currentSnap = JSON.parse(configSnapshot(cfg)) as Record<string, unknown>
+
+      const generalDirty =
+        snap.hubPath !== currentSnap.hubPath ||
+        snap.trashRetentionDays !== currentSnap.trashRetentionDays ||
+        snap.allowPermanentDelete !== currentSnap.allowPermanentDelete
+
+      const toolsDirty = JSON.stringify(snap.tools) !== JSON.stringify(currentSnap.tools)
+
+      const translationDirty =
+        snap.translationEngine !== currentSnap.translationEngine ||
+        snap.translationTargetLanguage !== currentSnap.translationTargetLanguage ||
+        snap.microsoftTranslatorKey !== currentSnap.microsoftTranslatorKey ||
+        snap.microsoftTranslatorRegion !== currentSnap.microsoftTranslatorRegion ||
+        snap.openAIBaseURL !== currentSnap.openAIBaseURL ||
+        snap.openAIAPIKey !== currentSnap.openAIAPIKey ||
+        snap.openAIModel !== currentSnap.openAIModel ||
+        snap.openAITemperature !== currentSnap.openAITemperature
+
+      const systemDirty = snap.logDebug !== currentSnap.logDebug
+
+      return {
+        general: generalDirty,
+        tools: toolsDirty,
+        translation: translationDirty,
+        system: systemDirty,
+      }
+    } catch {
+      return {}
+    }
   }, [cfg, savedSnapshot])
 
   const load = useCallback(async () => {
@@ -175,17 +295,23 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
 
   useEffect(() => {
     if (!highlightField) return
-    const node = document.querySelector<HTMLElement>(settingsFieldSelector(highlightField))
-    if (!node) return
-    node.scrollIntoView({behavior: 'smooth', block: 'center'})
-    node.classList.remove('is-flashing')
-    void node.offsetWidth
-    node.classList.add('is-flashing')
-    const focusable = node.querySelector<HTMLElement>('input, button, [tabindex]')
-    focusable?.focus({preventScroll: true})
-    const clear = window.setTimeout(() => setHighlightField(null), 1600)
-    return () => window.clearTimeout(clear)
-  }, [highlightField, highlightTick, editingToolIndex])
+    const timer = window.setTimeout(() => {
+      const node = document.querySelector<HTMLElement>(settingsFieldSelector(highlightField))
+      if (!node) return
+      node.scrollIntoView({behavior: 'smooth', block: 'center'})
+      node.classList.remove('is-flashing')
+      void node.offsetWidth
+      node.classList.add('is-flashing')
+      const focusable = node.querySelector<HTMLElement>('input, button, [tabindex]')
+      focusable?.focus({preventScroll: true})
+    }, 40)
+
+    const clear = window.setTimeout(() => setHighlightField(null), 1800)
+    return () => {
+      window.clearTimeout(timer)
+      window.clearTimeout(clear)
+    }
+  }, [highlightField, highlightTick, editingToolIndex, activeTab])
 
   function updateTool(index: number, patch: Partial<ToolMapping>) {
     if (!cfg) return
@@ -213,6 +339,7 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
         ...cfg,
         tools: [...(cfg.tools ?? []), {id, path: dir, enabled: true} as ToolMapping],
       } as AppConfig)
+      setActiveTab('tools')
       setEditingToolIndex(nextIndex)
       setStatus('')
     } catch (e) {
@@ -282,6 +409,18 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
     }
   }
 
+  async function copyText(text: string, key: string) {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    try {
+      await navigator.clipboard.writeText(trimmed)
+      setCopiedKey(key)
+      window.setTimeout(() => setCopiedKey(null), 1500)
+    } catch {
+      // 忽略无法复制
+    }
+  }
+
   async function exportTool(toolId: string) {
     const id = toolId.trim()
     if (!id) {
@@ -313,6 +452,8 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
     setError(issue.message)
     setStatus('')
     logClientWarn('settings save blocked', issue.message)
+    const targetTab = getFieldTab(issue.field)
+    setActiveTab(targetTab)
     const tool = parseToolField(issue.field)
     if (tool) setEditingToolIndex(tool.index)
     setHighlightField(issue.field)
@@ -389,7 +530,7 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
         setSavedSnapshot(configSnapshot(payload))
       }
       setEditingToolIndex(null)
-      setStatus('设置已保存')
+      setStatus('设置已保存成功')
       return true
     } catch (e) {
       const mapped = mapSaveConfigError(errMsg(e))
@@ -404,6 +545,20 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
       setSaving(false)
     }
   }
+
+  // 监听 Ctrl+S / Cmd+S 快捷保存
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (!saving && dirty) {
+          void handleSave()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [saving, dirty, cfg, savedSnapshot])
 
   function finishLeavePrompt(proceed: boolean) {
     setLeavePromptOpen(false)
@@ -436,18 +591,22 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
 
   if (loading) {
     return (
-      <div className="settings-page">
-        <p className="muted">加载中…</p>
+      <div className="settings-page settings-loading-state">
+        <div className="settings-loading-card">
+          <div className="settings-spinner" aria-hidden="true" />
+          <p className="muted">正在加载应用配置…</p>
+        </div>
       </div>
     )
   }
 
   if (!cfg) {
     return (
-      <div className="settings-page">
+      <div className="settings-page settings-error-state">
         {error ? <div className="error-banner">{error}</div> : null}
-        <button type="button" className="btn" onClick={() => void load()}>
-          重试
+        <button type="button" className="btn btn-primary" onClick={() => void load()}>
+          <IconRefresh size={16} />
+          重试加载
         </button>
       </div>
     )
@@ -463,7 +622,6 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
     setStatus('')
     try {
       await RequestElevation()
-      // On success the unelevated process exits; if we return, refresh status.
       const elev = await IsElevated()
       setElevated(elev)
       setStatus(elev ? '已处于管理员模式' : '提权未完成')
@@ -474,47 +632,71 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
     }
   }
 
+  const currentTabMeta = SETTINGS_TABS.find((t) => t.id === activeTab) ?? SETTINGS_TABS[0]
+
   return (
     <div className="settings-page">
+      {/* 迁移源仓确认弹窗 */}
       {migratePrompt ? (
         <div className="dialog-backdrop" role="presentation">
           <div
-            className="dialog dialog-confirm"
+            className="dialog dialog-confirm settings-dialog-surface"
             role="dialog"
             aria-modal="true"
             aria-labelledby="migrate-hub-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="migrate-hub-title">迁移源仓？</h2>
+            <div className="settings-dialog-header">
+              <div className="settings-dialog-icon-wrap warning">
+                <IconFolderOpen size={24} />
+              </div>
+              <h2 id="migrate-hub-title">确定迁移源仓？</h2>
+            </div>
             <p className="muted dialog-confirm-body">
-              将从{' '}
-              <strong>{migratePrompt.from}</strong>
-              {' '}剪切到{' '}
-              <strong>{migratePrompt.to}</strong>
-              {' '}（含回收站），并改写工具目录中的相关符号链接。
+              将把当前源仓内所有技能与回收站完整迁移：
+              <br />
+              <span className="settings-path-badge">{migratePrompt.from}</span>
+              <span className="settings-path-arrow">→</span>
+              <span className="settings-path-badge">{migratePrompt.to}</span>
+              <br />
+              并将同步更新所有已挂载工具目录中的符号链接。
             </p>
             <div className="dialog-actions">
-              <button type="button" className="btn" onClick={() => finishMigratePrompt(false)}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => finishMigratePrompt(false)}
+              >
                 取消
               </button>
-              <button type="button" className="btn btn-primary" onClick={() => finishMigratePrompt(true)}>
-                继续
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => finishMigratePrompt(true)}
+              >
+                确认迁移
               </button>
             </div>
           </div>
         </div>
       ) : null}
 
+      {/* 离开未保存确认弹窗 */}
       {leavePromptOpen ? (
         <div className="dialog-backdrop" role="presentation">
           <div
-            className="dialog"
+            className="dialog settings-dialog-surface"
             role="dialog"
             aria-labelledby="leave-settings-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="leave-settings-title">保存设置？</h2>
-            <p className="muted">设置有未保存的更改，离开前是否保存？</p>
+            <div className="settings-dialog-header">
+              <div className="settings-dialog-icon-wrap warning">
+                <IconSave size={24} />
+              </div>
+              <h2 id="leave-settings-title">保存设置更改？</h2>
+            </div>
+            <p className="muted">当前页面包含未保存的配置改动。若不保存离开，这些更改将会丢失。</p>
             <div className="dialog-actions">
               <button
                 type="button"
@@ -522,15 +704,15 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                 disabled={saving}
                 onClick={() => finishLeavePrompt(false)}
               >
-                取消
+                留在当前页
               </button>
               <button
                 type="button"
-                className="btn"
+                className="btn danger-subtle"
                 disabled={saving}
                 onClick={() => finishLeavePrompt(true)}
               >
-                不保存
+                放弃更改
               </button>
               <button
                 type="button"
@@ -543,547 +725,1065 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                   })()
                 }}
               >
-                {saving ? '保存中…' : '保存'}
+                {saving ? '正在保存…' : '保存并离开'}
               </button>
             </div>
           </div>
         </div>
       ) : null}
 
-      <div className="page-sticky-header">
-        <div className="page-toolbar">
-          <h2 className="page-title">设置</h2>
+      {/* 顶部粘性全局控制栏 */}
+      <header className="settings-global-header">
+        <div className="settings-header-intro">
+          <div className="settings-header-icon-pill">
+            <currentTabMeta.icon size={18} />
+          </div>
+          <div className="settings-header-titles">
+            <h2 className="settings-main-title">{currentTabMeta.label}</h2>
+            <p className="settings-subtitle">{currentTabMeta.subtitle}</p>
+          </div>
+        </div>
+
+        <div className="settings-header-actions">
+          {dirty ? (
+            <div className="settings-dirty-pill" title="有未保存修改，可使用快捷键 Ctrl+S 保存">
+              <span className="settings-dirty-dot" aria-hidden="true" />
+              <span>未保存更改</span>
+              <kbd className="settings-kbd">Ctrl+S</kbd>
+            </div>
+          ) : (
+            <span className="settings-synced-pill">
+              <span className="settings-synced-dot" aria-hidden="true" />
+              <IconCheck size={14} />
+              <span>配置已同步</span>
+            </span>
+          )}
+
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-ghost settings-reload-btn"
+            title="重新从本地加载最新配置"
+            onClick={() => void load()}
+          >
+            <IconRotateCcw size={15} />
+            <span>重载</span>
+          </button>
+
+          <button
+            type="button"
+            className={`btn btn-primary settings-save-btn ${dirty ? 'is-dirty' : ''}`}
             disabled={saving || !dirty}
             onClick={() => void handleSave()}
           >
-            {saving ? '保存中…' : '保存'}
+            <IconSave size={15} />
+            <span>{saving ? '保存中…' : '保存设置'}</span>
           </button>
-          <button type="button" className="btn" onClick={() => void load()}>
-            重新加载
-          </button>
-          {dirty ? <span className="muted">有未保存更改</span> : null}
         </div>
-      </div>
+      </header>
 
+      {/* 状态消息与错误横幅 */}
       {error ? (
-        <div className="error-banner" role="alert">
-          {error}
+        <div className="error-banner settings-banner-notice" role="alert">
+          <IconShieldAlert size={18} />
+          <span>{error}</span>
+          <button
+            type="button"
+            className="settings-banner-close"
+            onClick={() => setError('')}
+            aria-label="关闭"
+          >
+            <IconX size={15} />
+          </button>
         </div>
       ) : null}
-      {status ? <p className="muted status-line">{status}</p> : null}
 
-      <section className="panel">
-        <h3>权限状态</h3>
-        {elevated === null ? (
-          <div className="elev-status elev-status--pending" role="status">
-            <span className="elev-status-dot" aria-hidden="true" />
-            <div className="elev-status-body">
-              <strong className="elev-status-title">正在检测权限…</strong>
-              <p className="elev-status-desc">请稍候</p>
-            </div>
-          </div>
-        ) : elevated ? (
-          <div className="elev-status elev-status--ok" role="status">
-            <span className="elev-status-icon" aria-hidden="true">
-              <IconShieldCheck size={22} />
-            </span>
-            <div className="elev-status-body">
-              <strong className="elev-status-title">管理员模式</strong>
-              <p className="elev-status-desc">可创建与删除符号链接，整理功能可用</p>
-            </div>
-            <span className="elev-status-tag">已提权</span>
-          </div>
-        ) : (
-          <div className="elev-status elev-status--warn" role="status">
-            <span className="elev-status-icon" aria-hidden="true">
-              <IconShieldAlert size={22} />
-            </span>
-            <div className="elev-status-body">
-              <strong className="elev-status-title">普通权限运行中</strong>
-              <p className="elev-status-desc">
-                可浏览与编辑源仓；创建/删除符号链接与执行整理需要管理员权限。
-              </p>
-            </div>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={elevating}
-              onClick={() => void requestElevation()}
-            >
-              {elevating ? '正在提权…' : '以管理员身份重启'}
-            </button>
-          </div>
-        )}
-      </section>
+      {status ? (
+        <div className="settings-status-banner" role="status">
+          <IconCheck size={16} />
+          <span>{status}</span>
+        </div>
+      ) : null}
 
-      <section className="panel">
-        <h3>新手引导</h3>
-        <p className="muted">用演示走一遍整理、按工具开关和分组视图，不会改你磁盘上的文件。</p>
-        <button
-          type="button"
-          className="btn onboarding-replay-btn"
-          disabled={!onReplayOnboarding}
-          onClick={() => onReplayOnboarding?.()}
-        >
-          重新观看引导
-        </button>
-      </section>
-
-      <section className="panel">
-        <h3>源仓</h3>
-        <label
-          className={fieldClass('hubPath')}
-          data-settings-field="hubPath"
-        >
-          <span>源仓路径（hubPath）</span>
-          <div className="path-row">
-            <input
-              value={cfg.hubPath ?? ''}
-              onChange={(e) => {
-                setCfg({...cfg, hubPath: e.target.value} as AppConfig)
-                setStatus('')
-              }}
-              placeholder="%USERPROFILE%\.skillsmanager\skills"
-            />
-            <button
-              type="button"
-              className="btn"
-              title="打开文件夹选择"
-              onClick={() => void pickHubPath()}
-            >
-              浏览…
-            </button>
-            <button
-              type="button"
-              className="btn"
-              title="在资源管理器中打开"
-              disabled={!(cfg.hubPath ?? '').trim()}
-              onClick={() => void openFolder(cfg.hubPath ?? '')}
-            >
-              打开
-            </button>
-          </div>
-        </label>
-      </section>
-
-      <section className="panel">
-        <h3>翻译</h3>
-        <p className="muted">
-          翻译仅翻译技能描述且仅用于编辑器预览，不会修改 SKILL.md。
-        </p>
-        <div className="translation-settings" ref={translationSelectRef}>
-          <div className="settings-fields-row">
-            <div className="field">
-              <span>翻译引擎</span>
-              <div className="field-select">
+      {/* 主双栏架构：左侧分类导航 + 右侧设置内容 */}
+      <div className="settings-layout">
+        <aside className="settings-sidebar" aria-label="设置分类">
+          <nav className="settings-nav-group">
+            {SETTINGS_TABS.map((tab) => {
+              const TabIcon = tab.icon
+              const isCurrent = activeTab === tab.id
+              const hasUnsaved = Boolean(tabDirtyMap[tab.id])
+              return (
                 <button
+                  key={tab.id}
                   type="button"
-                  className="field-select-trigger"
-                  aria-haspopup="listbox"
-                  aria-expanded={openTranslationSelect === 'engine'}
-                  onClick={() =>
-                    setOpenTranslationSelect((current) =>
-                      current === 'engine' ? null : 'engine',
-                    )
-                  }
+                  className={`settings-nav-item ${isCurrent ? 'is-active' : ''}`}
+                  onClick={() => setActiveTab(tab.id)}
                 >
-                  {TRANSLATION_ENGINES.find((engine) => engine.value === translationEngine)?.label ??
-                    translationEngine}
+                  <span className="settings-nav-indicator" aria-hidden="true" />
+                  <span className="settings-nav-icon">
+                    <TabIcon size={18} />
+                  </span>
+                  <span className="settings-nav-label">{tab.label}</span>
+                  {hasUnsaved ? (
+                    <span
+                      className="settings-nav-dirty-badge"
+                      title="该分类下有未保存修改"
+                      aria-label="有未保存修改"
+                    />
+                  ) : null}
                 </button>
-                {openTranslationSelect === 'engine' ? (
-                  <ul className="field-select-menu" role="listbox">
-                    {TRANSLATION_ENGINES.map((engine) => (
-                      <li key={engine.value} role="presentation">
+              )
+            })}
+          </nav>
+
+          {/* 侧栏底部状态胶囊 */}
+          <div className="settings-sidebar-footer">
+            <div className="settings-priv-mini-card">
+              <div className="settings-priv-dot-wrapper">
+                <span className={`settings-priv-dot ${elevated ? 'is-ok' : 'is-warn'}`} />
+              </div>
+              <div className="settings-priv-mini-text">
+                <span className="settings-priv-mini-title">
+                  {elevated ? '管理员模式' : '普通用户权限'}
+                </span>
+                <span className="settings-priv-mini-sub">
+                  {elevated ? '软链接已就绪' : '整理功能受限'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* 右侧主设置面板内容 */}
+        <main className="settings-content">
+          {/* TAB 1: 常规与源仓 */}
+          {activeTab === 'general' ? (
+            <div className="settings-section-container">
+              {/* 源仓路径核心配置 */}
+              <div className="settings-card featured">
+                <div className="settings-card-head">
+                  <div className="settings-card-icon-pill">
+                    <IconFolderOpen size={20} />
+                  </div>
+                  <div>
+                    <h3 className="settings-card-title">技能源仓（Hub）</h3>
+                    <p className="settings-card-desc">
+                      SkillsManager 集中存放所有 Skill 的核心仓库。各 Agent 工具将通过符号链接直接挂载此目录。
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className={fieldClass('hubPath', 'settings-field-box')}
+                  data-settings-field="hubPath"
+                >
+                  <label className="settings-field-label" htmlFor="settings-hub-path">
+                    源仓存储绝对路径
+                  </label>
+                  <div className="settings-path-input-group">
+                    <input
+                      id="settings-hub-path"
+                      className="settings-text-input"
+                      value={cfg.hubPath ?? ''}
+                      onChange={(e) => {
+                        setCfg({...cfg, hubPath: e.target.value} as AppConfig)
+                        setStatus('')
+                      }}
+                      placeholder="%USERPROFILE%\.skillsmanager\skills"
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      title="复制路径到剪贴板"
+                      onClick={() => void copyText(cfg.hubPath ?? '', 'hubPath')}
+                    >
+                      {copiedKey === 'hubPath' ? (
+                        <>
+                          <IconCheck size={15} />
+                          <span>已复制</span>
+                        </>
+                      ) : (
+                        <>
+                          <IconCopy size={15} />
+                          <span>复制</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      title="打开文件夹浏览窗口"
+                      onClick={() => void pickHubPath()}
+                    >
+                      <IconFolderOpen size={15} />
+                      <span>浏览…</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      title="在系统资源管理器中打开此文件夹"
+                      disabled={!(cfg.hubPath ?? '').trim()}
+                      onClick={() => void openFolder(cfg.hubPath ?? '')}
+                    >
+                      <IconExternalLink size={15} />
+                      <span>打开</span>
+                    </button>
+                  </div>
+                  <div className="settings-field-hint">
+                    默认推荐路径为 <code>%USERPROFILE%\.skillsmanager\skills</code>。修改后保存将提示迁移现有技能。
+                  </div>
+                </div>
+              </div>
+
+              {/* 回收站保留策略 */}
+              <div className="settings-card">
+                <div className="settings-card-head">
+                  <div className="settings-card-icon-pill">
+                    <IconTrash size={20} />
+                  </div>
+                  <div>
+                    <h3 className="settings-card-title">回收站与清理策略</h3>
+                    <p className="settings-card-desc">
+                      在应用内删除的技能会安全移入源仓回收站（hub/_trash），保留期限内可随时一键恢复。
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className={fieldClass('trashRetentionDays', 'settings-field-box')}
+                  data-settings-field="trashRetentionDays"
+                >
+                  <label className="settings-field-label" htmlFor="settings-trash-days">
+                    回收站保留天数
+                  </label>
+                  <div className="settings-input-with-presets">
+                    <input
+                      id="settings-trash-days"
+                      type="number"
+                      min={1}
+                      max={365}
+                      step={1}
+                      className="settings-text-input narrow"
+                      value={cfg.trashRetentionDays ?? 7}
+                      onChange={(e) => {
+                        setCfg({
+                          ...cfg,
+                          trashRetentionDays: Number(e.target.value),
+                        } as AppConfig)
+                        setStatus('')
+                      }}
+                    />
+                    <span className="settings-unit-text">天</span>
+
+                    <div className="settings-preset-chips">
+                      {[7, 14, 30, 90].map((d) => (
                         <button
+                          key={d}
                           type="button"
-                          role="option"
-                          aria-selected={engine.value === translationEngine}
-                          className={engine.value === translationEngine ? 'is-active' : undefined}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setOpenTranslationSelect(null)
+                          className={`settings-chip ${(cfg.trashRetentionDays ?? 7) === d ? 'is-active' : ''}`}
+                          onClick={() => {
+                            setCfg({...cfg, trashRetentionDays: d} as AppConfig)
+                            setStatus('')
+                          }}
+                        >
+                          {d} 天
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="settings-field-hint">
+                    超过设定天数的文件会在源仓扫描时自动清理；若需长期归档建议放入未开启链接的分组。
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* TAB 2: 工具生态 */}
+          {activeTab === 'tools' ? (
+            <div className="settings-section-container">
+              <div className="settings-card">
+                <div className="settings-card-head with-action">
+                  <div className="settings-card-head-left">
+                    <div className="settings-card-icon-pill">
+                      <IconWrench size={20} />
+                    </div>
+                    <div>
+                      <h3 className="settings-card-title">已挂载的 Agent 工具</h3>
+                      <p className="settings-card-desc">
+                        配置 Cursor、Claude、Windsurf 等开发工具的技能存储目录。源仓整理时将把其中的技能软链挂载到此处。
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary settings-add-tool-btn"
+                    onClick={() => void addTool()}
+                  >
+                    <IconPlus size={16} />
+                    <span>添加工具</span>
+                  </button>
+                </div>
+
+                {(cfg.tools ?? []).length === 0 ? (
+                  <div className="settings-empty-tools">
+                    <div className="settings-empty-icon-wrap">
+                      <IconWrench size={32} />
+                    </div>
+                    <h4>暂无挂载的工具目录</h4>
+                    <p className="muted">
+                      点击右上角「添加工具」选择本地 Agent（如 .cursor/skills 或 .claude/skills）目录。
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => void addTool()}
+                    >
+                      <IconPlus size={15} />
+                      选择工具目录
+                    </button>
+                  </div>
+                ) : (
+                  <div className="settings-tools-grid">
+                    {(cfg.tools ?? []).map((tool, index) => {
+                      const editing = editingToolIndex === index
+                      const badge = getToolBadge(tool.id)
+                      const copyId = `tool-path-${index}`
+                      return (
+                        <div
+                          key={index}
+                          className={`settings-tool-card ${editing ? 'is-editing' : ''}`}
+                        >
+                          {/* 正常浏览卡片 */}
+                          {!editing ? (
+                            <div className="settings-tool-view-mode">
+                              <div className="settings-tool-header">
+                                <div className="settings-tool-identity">
+                                  <span
+                                    className="settings-tool-avatar"
+                                    style={{
+                                      background: badge.gradient,
+                                      color: '#ffffff',
+                                      boxShadow: `0 2px 8px ${badge.shadowColor}`,
+                                    }}
+                                    title={badge.displayName}
+                                    aria-hidden="true"
+                                  >
+                                    {badge.letter}
+                                  </span>
+                                  <div className="settings-tool-meta">
+                                    <div className="settings-tool-name-row">
+                                      <strong className="settings-tool-name">
+                                        {tool.id || '（未命名工具）'}
+                                      </strong>
+                                      <span
+                                        className={`settings-tool-badge ${tool.enabled ? 'enabled' : 'disabled'}`}
+                                      >
+                                        <span className="settings-badge-dot" aria-hidden="true" />
+                                        <span>{tool.enabled ? '已启用挂载' : '未挂载'}</span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="settings-tool-quick-switch">
+                                  <label
+                                    className="settings-switch-label"
+                                    title={tool.enabled ? '点击禁用该工具挂载' : '点击启用该工具挂载'}
+                                  >
+                                    <span className="switch">
+                                      <input
+                                        type="checkbox"
+                                        role="switch"
+                                        checked={Boolean(tool.enabled)}
+                                        aria-checked={Boolean(tool.enabled)}
+                                        onChange={(e) =>
+                                          updateTool(index, {enabled: e.target.checked})
+                                        }
+                                      />
+                                      <span className="switch-ui" aria-hidden="true" />
+                                    </span>
+                                  </label>
+                                </div>
+                              </div>
+
+                              {/* 专属的路径展示胶囊栏 */}
+                              <div className="settings-tool-path-bar">
+                                <div
+                                  className="settings-tool-path-content"
+                                  title={tool.path || '未配置路径'}
+                                >
+                                  <IconFolderOpen size={14} className="settings-path-icon" />
+                                  <span className="settings-tool-path-text">
+                                    {tool.path || '（未设置绝对路径）'}
+                                  </span>
+                                </div>
+                                <div className="settings-tool-path-actions">
+                                  <button
+                                    type="button"
+                                    className="settings-path-action-btn"
+                                    title={copiedKey === copyId ? '已复制绝对路径' : '复制绝对路径'}
+                                    onClick={() => void copyText(tool.path, copyId)}
+                                  >
+                                    {copiedKey === copyId ? (
+                                      <>
+                                        <IconCheck size={13} className="text-success" />
+                                        <span className="settings-path-btn-text">已复制</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <IconCopy size={13} />
+                                        <span className="settings-path-btn-text">复制</span>
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="settings-path-action-btn"
+                                    title="在系统资源管理器中打开此目录"
+                                    disabled={!tool.path.trim()}
+                                    onClick={() => void openFolder(tool.path)}
+                                  >
+                                    <IconExternalLink size={13} />
+                                    <span className="settings-path-btn-text">打开</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* 底部操作栏 */}
+                              <div className="settings-tool-footer-actions">
+                                <div className="settings-tool-sub-actions">
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm settings-backup-btn"
+                                    title="将该工具所有 Skill 导出为 Zip 备份"
+                                    disabled={!tool.id.trim() || exportingToolId !== null}
+                                    onClick={() => void exportTool(tool.id)}
+                                  >
+                                    <IconDownload size={14} />
+                                    <span>
+                                      {exportingToolId === tool.id ? '导出中…' : '备份 Zip'}
+                                    </span>
+                                  </button>
+                                </div>
+
+                                <div className="settings-tool-main-actions">
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm settings-edit-btn"
+                                    onClick={() => setEditingToolIndex(index)}
+                                  >
+                                    <IconPencil size={13} />
+                                    <span>编辑</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm settings-delete-btn"
+                                    title="从列表中移除该工具映射"
+                                    onClick={() => removeTool(index)}
+                                  >
+                                    <IconTrash size={13} />
+                                    <span>删除</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            /* 编辑模式 */
+                            <div className="settings-tool-edit-mode">
+                              <div className="settings-tool-edit-header">
+                                <div className="settings-tool-edit-title-group">
+                                  <span
+                                    className="settings-tool-avatar sm"
+                                    style={{
+                                      background: badge.gradient,
+                                      color: '#ffffff',
+                                    }}
+                                    aria-hidden="true"
+                                  >
+                                    {badge.letter}
+                                  </span>
+                                  <div>
+                                    <h4>编辑工具映射 (#{index + 1})</h4>
+                                    <span className="settings-field-hint">
+                                      修改工具标识与本地技能存放目录
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="settings-tool-edit-fields">
+                                <label
+                                  className={fieldClass(`tool:${index}:id`, 'settings-field-box')}
+                                  data-settings-field={`tool:${index}:id`}
+                                >
+                                  <span className="settings-field-label">工具唯一 ID</span>
+                                  <input
+                                    className="settings-text-input"
+                                    value={tool.id}
+                                    onChange={(e) => updateTool(index, {id: e.target.value})}
+                                    placeholder="例如 cursor, claude, windsurf, opencode"
+                                    autoFocus
+                                  />
+                                </label>
+
+                                <label
+                                  className={fieldClass(`tool:${index}:path`, 'settings-field-box')}
+                                  data-settings-field={`tool:${index}:path`}
+                                >
+                                  <span className="settings-field-label">工具技能绝对路径</span>
+                                  <div className="settings-path-input-group">
+                                    <input
+                                      className="settings-text-input"
+                                      value={tool.path}
+                                      onChange={(e) =>
+                                        updateTool(index, {path: e.target.value})
+                                      }
+                                      placeholder="例如 C:\Users\Admin\.cursor\skills"
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn"
+                                      onClick={() => void pickToolPath(index)}
+                                    >
+                                      <IconFolderOpen size={15} />
+                                      <span>浏览…</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      disabled={!tool.path.trim()}
+                                      onClick={() => void openFolder(tool.path)}
+                                    >
+                                      <IconExternalLink size={15} />
+                                      <span>打开</span>
+                                    </button>
+                                  </div>
+                                </label>
+                              </div>
+
+                              <div className="settings-tool-edit-actions">
+                                <label className="check-field">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(tool.enabled)}
+                                    onChange={(e) =>
+                                      updateTool(index, {enabled: e.target.checked})
+                                    }
+                                  />
+                                  <span>启用此工具挂载</span>
+                                </label>
+
+                                <div className="settings-tool-edit-btns">
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => setEditingToolIndex(null)}
+                                  >
+                                    <span>取消</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => setEditingToolIndex(null)}
+                                  >
+                                    <IconCheck size={14} />
+                                    <span>完成</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {/* TAB 3: AI 与翻译 */}
+          {activeTab === 'translation' ? (
+            <div className="settings-section-container" ref={translationSelectRef}>
+              {/* 引擎与目标语言配置 */}
+              <div className="settings-card">
+                <div className="settings-card-head">
+                  <div className="settings-card-icon-pill">
+                    <IconLanguages size={20} />
+                  </div>
+                  <div>
+                    <h3 className="settings-card-title">翻译引擎与目标语言</h3>
+                    <p className="settings-card-desc">
+                      翻译用于在技能编辑器中提供多语言预览或生成多语言副本，绝不会在未确认的情况下覆盖原 SKILL.md。
+                    </p>
+                  </div>
+                </div>
+
+                {/* 引擎切换卡片组 */}
+                <div className="settings-field-box">
+                  <span className="settings-field-label">选择默认翻译引擎</span>
+                  <div className="settings-engine-grid">
+                    {TRANSLATION_ENGINES.map((engine) => {
+                      const isSelected = translationEngine === engine.value
+                      return (
+                        <div
+                          key={engine.value}
+                          className={`settings-engine-card ${isSelected ? 'is-selected' : ''}`}
+                          onClick={() => {
                             setCfg({...cfg, translationEngine: engine.value} as AppConfig)
                             setStatus('')
                           }}
                         >
-                          {engine.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
-            <div className={fieldClass('translationTargetLanguage')} data-settings-field="translationTargetLanguage">
-              <span>目标语言</span>
-              <div className="field-select">
-                <button
-                  type="button"
-                  className="field-select-trigger"
-                  aria-haspopup="listbox"
-                  aria-expanded={openTranslationSelect === 'targetLanguage'}
-                  onClick={() =>
-                    setOpenTranslationSelect((current) =>
-                      current === 'targetLanguage' ? null : 'targetLanguage',
-                    )
-                  }
-                >
-                  {SKILL_LANGUAGES.find(
-                    (language) =>
-                      language.value === (cfg.translationTargetLanguage ?? 'zh-CN'),
-                  )?.label ?? (cfg.translationTargetLanguage ?? 'zh-CN')}
-                </button>
-                {openTranslationSelect === 'targetLanguage' ? (
-                  <ul className="field-select-menu" role="listbox">
-                    {SKILL_LANGUAGES.map((language) => (
-                      <li key={language.value} role="presentation">
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected={
-                            language.value === (cfg.translationTargetLanguage ?? 'zh-CN')
-                          }
-                          className={
-                            language.value === (cfg.translationTargetLanguage ?? 'zh-CN')
-                              ? 'is-active'
-                              : undefined
-                          }
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setOpenTranslationSelect(null)
-                            setCfg({...cfg, translationTargetLanguage: language.value} as AppConfig)
-                            setStatus('')
-                          }}
-                        >
-                          {language.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          {usesMicrosoft ? (
-            <div className="settings-fields-row">
-              <label className={fieldClass('microsoftTranslatorKey')} data-settings-field="microsoftTranslatorKey">
-                <span>Subscription Key</span>
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={cfg.microsoftTranslatorKey ?? ''}
-                  onChange={(e) => {
-                    setCfg({...cfg, microsoftTranslatorKey: e.target.value} as AppConfig)
-                    setStatus('')
-                  }}
-                  placeholder="Azure Translator 密钥（保存在本地 .env）"
-                />
-              </label>
-              <label className="field">
-                <span>区域（Region）</span>
-                <input
-                  value={cfg.microsoftTranslatorRegion ?? 'eastasia'}
-                  onChange={(e) => {
-                    setCfg({...cfg, microsoftTranslatorRegion: e.target.value} as AppConfig)
-                    setStatus('')
-                  }}
-                  placeholder="eastasia"
-                />
-              </label>
-            </div>
-          ) : null}
-          {usesOpenAICompatible ? (
-            <>
-              <div className="settings-fields-row">
-                <label className={fieldClass('openAIBaseURL')} data-settings-field="openAIBaseURL">
-                  <span>接口地址（Base URL）</span>
-                  <input
-                    value={cfg.openAIBaseURL ?? 'https://api.openai.com/v1'}
-                    onChange={(e) => {
-                      setCfg({...cfg, openAIBaseURL: e.target.value} as AppConfig)
-                      setStatus('')
-                    }}
-                    placeholder="https://api.openai.com/v1"
-                  />
-                </label>
-                <label className={fieldClass('openAIModel')} data-settings-field="openAIModel">
-                  <span>模型名称</span>
-                  <input
-                    value={cfg.openAIModel ?? 'gpt-5.6-terra'}
-                    onChange={(e) => {
-                      setCfg({...cfg, openAIModel: e.target.value} as AppConfig)
-                      setStatus('')
-                    }}
-                    placeholder="gpt-5.6-terra"
-                  />
-                </label>
-              </div>
-              <div className="settings-fields-row">
-                <label
-                  className={fieldClass('openAITemperature', 'field narrow')}
-                  data-settings-field="openAITemperature"
-                >
-                  <span>模型温度</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={1}
-                    step={0.1}
-                    title="范围 0–1，建议 0–0.3"
-                    value={
-                      Number.isFinite(cfg.openAITemperature)
-                        ? cfg.openAITemperature
-                        : 0.2
-                    }
-                    onChange={(e) => {
-                      setCfg({
-                        ...cfg,
-                        openAITemperature: Number(e.target.value),
-                      } as AppConfig)
-                      setStatus('')
-                    }}
-                  />
-                </label>
-                <label className={fieldClass('openAIAPIKey')} data-settings-field="openAIAPIKey">
-                  <span>API Key</span>
-                  <input
-                    type="password"
-                    value={cfg.openAIAPIKey ?? ''}
-                    onChange={(e) => {
-                      setCfg({...cfg, openAIAPIKey: e.target.value} as AppConfig)
-                      setStatus('')
-                    }}
-                    placeholder="sk-…"
-                    autoComplete="off"
-                  />
-                </label>
-                <p className="translation-api-key-warning">
-                  API Key 保存在用户目录 ~/.skillsmanager/.env
-                </p>
-              </div>
-            </>
-          ) : null}
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="section-head">
-          <h3>工具目录</h3>
-          <button type="button" className="btn" onClick={() => void addTool()}>
-            添加工具
-          </button>
-        </div>
-        {(cfg.tools ?? []).length === 0 ? (
-          <p className="muted">暂无工具映射</p>
-        ) : (
-          <div className="tools-list">
-            {(cfg.tools ?? []).map((tool, index) => {
-              const editing = editingToolIndex === index
-              return (
-                <div key={index} className={`tool-row${editing ? ' editing' : ''}`}>
-                  {editing ? (
-                    <>
-                      <label
-                        className={fieldClass(`tool:${index}:id`)}
-                        data-settings-field={`tool:${index}:id`}
-                      >
-                        <span>ID</span>
-                        <input
-                          value={tool.id}
-                          onChange={(e) => updateTool(index, {id: e.target.value})}
-                          placeholder="例如 cursor"
-                          autoFocus
-                        />
-                      </label>
-                      <label
-                        className={fieldClass(`tool:${index}:path`, 'field grow')}
-                        data-settings-field={`tool:${index}:path`}
-                      >
-                        <span>路径</span>
-                        <div className="path-row">
-                          <input
-                            value={tool.path}
-                            onChange={(e) => updateTool(index, {path: e.target.value})}
-                            placeholder="绝对路径"
-                          />
-                          <button
-                            type="button"
-                            className="btn"
-                            title="打开文件夹选择"
-                            onClick={() => void pickToolPath(index)}
-                          >
-                            浏览…
-                          </button>
-                          <button
-                            type="button"
-                            className="btn"
-                            title="在资源管理器中打开"
-                            disabled={!tool.path.trim()}
-                            onClick={() => void openFolder(tool.path)}
-                          >
-                            打开
-                          </button>
+                          <div className="settings-engine-radio">
+                            <span
+                              className={`settings-radio-dot ${isSelected ? 'is-active' : ''}`}
+                            />
+                          </div>
+                          <div className="settings-engine-info">
+                            <div className="settings-engine-title-row">
+                              <strong>{engine.label}</strong>
+                              <span className="settings-engine-badge">{engine.badge}</span>
+                            </div>
+                            <p className="settings-engine-desc">{engine.desc}</p>
+                          </div>
                         </div>
-                      </label>
-                    </>
-                  ) : (
-                    <div className="tool-view grow">
-                      <div className="tool-view-id">{tool.id || '（未命名）'}</div>
-                      <div className="tool-view-path" title={tool.path}>
-                        {tool.path || '（未设置路径）'}
-                      </div>
-                    </div>
-                  )}
-                  <label className="check-field">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(tool.enabled)}
-                      onChange={(e) => updateTool(index, {enabled: e.target.checked})}
-                    />
-                    启用
-                  </label>
-                  {!editing ? (
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* 目标语言下拉选择 */}
+                <div
+                  className={fieldClass('translationTargetLanguage', 'settings-field-box')}
+                  data-settings-field="translationTargetLanguage"
+                >
+                  <label className="settings-field-label">目标翻译语言</label>
+                  <div className="field-select">
                     <button
                       type="button"
-                      className="btn"
-                      title="在资源管理器中打开"
-                      disabled={!tool.path.trim()}
-                      onClick={() => void openFolder(tool.path)}
-                    >
-                      打开
-                    </button>
-                  ) : null}
-                  {editing ? (
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setEditingToolIndex(null)}
-                    >
-                      完成
-                    </button>
-                  ) : null}
-                  <div
-                    className="card-menu-wrap tool-row-menu"
-                    ref={openToolMenuIndex === index ? toolMenuRef : undefined}
-                  >
-                    <button
-                      type="button"
-                      className="btn"
-                      aria-label="更多"
-                      aria-expanded={openToolMenuIndex === index}
-                      disabled={exportingToolId !== null}
+                      className="field-select-trigger settings-select-button"
+                      aria-haspopup="listbox"
+                      aria-expanded={openTranslationSelect === 'targetLanguage'}
                       onClick={() =>
-                        setOpenToolMenuIndex(openToolMenuIndex === index ? null : index)
+                        setOpenTranslationSelect((cur) =>
+                          cur === 'targetLanguage' ? null : 'targetLanguage',
+                        )
                       }
                     >
-                      更多
+                      <span>
+                        {SKILL_LANGUAGES.find(
+                          (l) => l.value === (cfg.translationTargetLanguage ?? 'zh-CN'),
+                        )?.label ?? (cfg.translationTargetLanguage ?? 'zh-CN')}
+                      </span>
+                      <span className="settings-select-arrow" aria-hidden="true" />
                     </button>
-                    {openToolMenuIndex === index ? (
-                      <div className="card-menu">
-                        {!editing ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenToolMenuIndex(null)
-                              setEditingToolIndex(index)
-                            }}
-                          >
-                            编辑
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          disabled={!tool.id.trim() || exportingToolId !== null}
-                          onClick={() => {
-                            setOpenToolMenuIndex(null)
-                            void exportTool(tool.id)
-                          }}
-                        >
-                          {exportingToolId === tool.id ? '导出中…' : '导出'}
-                        </button>
-                        <button
-                          type="button"
-                          className="danger"
-                          onClick={() => {
-                            setOpenToolMenuIndex(null)
-                            removeTool(index)
-                          }}
-                        >
-                          删除
-                        </button>
-                      </div>
+                    {openTranslationSelect === 'targetLanguage' ? (
+                      <ul className="field-select-menu" role="listbox">
+                        {SKILL_LANGUAGES.map((language) => (
+                          <li key={language.value} role="presentation">
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={
+                                language.value === (cfg.translationTargetLanguage ?? 'zh-CN')
+                              }
+                              className={
+                                language.value === (cfg.translationTargetLanguage ?? 'zh-CN')
+                                  ? 'is-active'
+                                  : undefined
+                              }
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                setOpenTranslationSelect(null)
+                                setCfg({
+                                  ...cfg,
+                                  translationTargetLanguage: language.value,
+                                } as AppConfig)
+                                setStatus('')
+                              }}
+                            >
+                              <span>{language.label}</span>
+                              {language.value ===
+                              (cfg.translationTargetLanguage ?? 'zh-CN') ? (
+                                <IconCheck size={14} />
+                              ) : null}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
+              </div>
 
-      <section className="panel">
-        <h3>诊断日志</h3>
-        <p className="muted">
-          操作与错误会写入本地日志，便于排查难复现问题。默认 Info；打开详细日志后记录 HTTP
-          状态与重试等调试信息。不会写入 API Key 或文档正文。
-        </p>
-        <div className="log-settings-row">
-          <label className="switch-field">
-            <span>详细日志（Debug）</span>
-            <span className="switch">
-              <input
-                type="checkbox"
-                role="switch"
-                checked={Boolean(cfg.logDebug)}
-                aria-checked={Boolean(cfg.logDebug)}
-                onChange={(e) => {
-                  setCfg({...cfg, logDebug: e.target.checked} as AppConfig)
-                  setStatus('')
-                }}
-              />
-              <span className="switch-ui" aria-hidden="true" />
-            </span>
-          </label>
-          <div className="log-dir-inline">
-            <span className="log-dir-label">日志目录</span>
-            <span className="log-dir-path" title={logsDir || undefined}>
-              {logsDir || '%USERPROFILE%\\.skillsmanager\\logs'}
-            </span>
-            <button type="button" className="btn" onClick={() => void openLogsFolder()}>
-              打开
-            </button>
-          </div>
-        </div>
-      </section>
+              {/* 微软 Azure Key 专属配置 */}
+              {usesMicrosoft ? (
+                <div className="settings-card">
+                  <div className="settings-card-head">
+                    <div className="settings-card-icon-pill">
+                      <IconLock size={20} />
+                    </div>
+                    <div>
+                      <h3 className="settings-card-title">Azure 翻译服务凭证</h3>
+                      <p className="settings-card-desc">
+                        配置 Azure 认知服务的 API 密钥与数据中心区域。密钥将加密存储在本地 .env 文件中。
+                      </p>
+                    </div>
+                  </div>
 
-      <section className="panel">
-        <h3>回收站</h3>
-        <p className="muted">删除的技能可在 Skills 页「回收站」找回；超过保留天数将自动清理。</p>
-        <label
-          className={fieldClass('trashRetentionDays', 'field narrow')}
-          data-settings-field="trashRetentionDays"
-        >
-          <span>保留天数（trashRetentionDays）</span>
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={cfg.trashRetentionDays ?? 7}
-            onChange={(e) => {
-              setCfg({
-                ...cfg,
-                trashRetentionDays: Number(e.target.value),
-              } as AppConfig)
-              setStatus('')
-            }}
-          />
-        </label>
-      </section>
+                  <div className="settings-form-row">
+                    <label
+                      className={fieldClass('microsoftTranslatorKey', 'settings-field-box flex-2')}
+                      data-settings-field="microsoftTranslatorKey"
+                    >
+                      <span className="settings-field-label">Subscription Key 订阅密钥</span>
+                      <div className="settings-password-wrap">
+                        <input
+                          type={showMicrosoftKey ? 'text' : 'password'}
+                          autoComplete="off"
+                          className="settings-text-input"
+                          value={cfg.microsoftTranslatorKey ?? ''}
+                          onChange={(e) => {
+                            setCfg({
+                              ...cfg,
+                              microsoftTranslatorKey: e.target.value,
+                            } as AppConfig)
+                            setStatus('')
+                          }}
+                          placeholder="输入 Azure 32 位订阅密钥"
+                        />
+                        <button
+                          type="button"
+                          className="settings-eye-btn"
+                          title={showMicrosoftKey ? '隐藏密钥' : '显示密钥'}
+                          onClick={() => setShowMicrosoftKey(!showMicrosoftKey)}
+                        >
+                          {showMicrosoftKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+                        </button>
+                      </div>
+                    </label>
+
+                    <label className="settings-field-box flex-1">
+                      <span className="settings-field-label">服务区域（Region）</span>
+                      <input
+                        className="settings-text-input"
+                        value={cfg.microsoftTranslatorRegion ?? 'eastasia'}
+                        onChange={(e) => {
+                          setCfg({
+                            ...cfg,
+                            microsoftTranslatorRegion: e.target.value,
+                          } as AppConfig)
+                          setStatus('')
+                        }}
+                        placeholder="例如 eastasia, global"
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* OpenAI 兼容端点专属配置 */}
+              {usesOpenAICompatible ? (
+                <div className="settings-card">
+                  <div className="settings-card-head">
+                    <div className="settings-card-icon-pill">
+                      <IconSparkles size={20} />
+                    </div>
+                    <div>
+                      <h3 className="settings-card-title">OpenAI 兼容端点与模型参数</h3>
+                      <p className="settings-card-desc">
+                        接入任意兼容 OpenAI 规范的 API 接口（如 OpenAI 官方、DeepSeek、Moonshot、通义千问或本地 Ollama/vLLM）。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="settings-form-row">
+                    <label
+                      className={fieldClass('openAIBaseURL', 'settings-field-box flex-2')}
+                      data-settings-field="openAIBaseURL"
+                    >
+                      <span className="settings-field-label">接口服务地址（Base URL）</span>
+                      <input
+                        className="settings-text-input"
+                        value={cfg.openAIBaseURL ?? 'https://api.openai.com/v1'}
+                        onChange={(e) => {
+                          setCfg({...cfg, openAIBaseURL: e.target.value} as AppConfig)
+                          setStatus('')
+                        }}
+                        placeholder="https://api.openai.com/v1"
+                      />
+                    </label>
+
+                    <label
+                      className={fieldClass('openAIModel', 'settings-field-box flex-1')}
+                      data-settings-field="openAIModel"
+                    >
+                      <span className="settings-field-label">模型标识（Model ID）</span>
+                      <input
+                        className="settings-text-input"
+                        value={cfg.openAIModel ?? 'gpt-5.6-terra'}
+                        onChange={(e) => {
+                          setCfg({...cfg, openAIModel: e.target.value} as AppConfig)
+                          setStatus('')
+                        }}
+                        placeholder="例如 deepseek-chat, gpt-4o-mini"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="settings-form-row">
+                    <label
+                      className={fieldClass('openAIAPIKey', 'settings-field-box flex-2')}
+                      data-settings-field="openAIAPIKey"
+                    >
+                      <span className="settings-field-label">API 访问密钥（API Key）</span>
+                      <div className="settings-password-wrap">
+                        <input
+                          type={showOpenAIKey ? 'text' : 'password'}
+                          autoComplete="off"
+                          className="settings-text-input"
+                          value={cfg.openAIAPIKey ?? ''}
+                          onChange={(e) => {
+                            setCfg({...cfg, openAIAPIKey: e.target.value} as AppConfig)
+                            setStatus('')
+                          }}
+                          placeholder="sk-…"
+                        />
+                        <button
+                          type="button"
+                          className="settings-eye-btn"
+                          title={showOpenAIKey ? '隐藏密钥' : '显示密钥'}
+                          onClick={() => setShowOpenAIKey(!showOpenAIKey)}
+                        >
+                          {showOpenAIKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+                        </button>
+                      </div>
+                    </label>
+
+                    <label
+                      className={fieldClass('openAITemperature', 'settings-field-box flex-1')}
+                      data-settings-field="openAITemperature"
+                    >
+                      <div className="settings-slider-label-row">
+                        <span className="settings-field-label">采样温度（Temperature）</span>
+                        <span className="settings-slider-value-tag">
+                          {Number.isFinite(cfg.openAITemperature)
+                            ? Number(cfg.openAITemperature).toFixed(1)
+                            : '0.2'}
+                        </span>
+                      </div>
+                      <div className="settings-temperature-slider-wrap">
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          className="settings-range-slider"
+                          value={
+                            Number.isFinite(cfg.openAITemperature)
+                              ? cfg.openAITemperature
+                              : 0.2
+                          }
+                          onChange={(e) => {
+                            setCfg({
+                              ...cfg,
+                              openAITemperature: Number(e.target.value),
+                            } as AppConfig)
+                            setStatus('')
+                          }}
+                        />
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* 安全存储提示卡片 */}
+                  <div className="settings-security-notice">
+                    <IconLock size={16} className="settings-security-icon" />
+                    <div className="settings-security-content">
+                      <strong>本地安全存储保障</strong>
+                      <p>
+                        翻译接口凭证将单独写入本地 <code>~/.skillsmanager/.env</code> 文件，不会明文存入通用配置文件，也绝不会上传至任何第三方云端。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* TAB 4: 系统与诊断 */}
+          {activeTab === 'system' ? (
+            <div className="settings-section-container">
+              {/* 权限状态面板 */}
+              <div className="settings-card">
+                <div className="settings-card-head">
+                  <div className="settings-card-icon-pill">
+                    <IconShield size={20} />
+                  </div>
+                  <div>
+                    <h3 className="settings-card-title">系统管理员权限</h3>
+                    <p className="settings-card-desc">
+                      创建与管理 Windows NTFS 符号链接（Symlink）必须具备管理员权限或开启 Windows 开发者模式。
+                    </p>
+                  </div>
+                </div>
+
+                {elevated === null ? (
+                  <div className="elev-status elev-status--pending" role="status">
+                    <span className="elev-status-dot" aria-hidden="true" />
+                    <div className="elev-status-body">
+                      <strong className="elev-status-title">正在检测系统权限…</strong>
+                      <p className="elev-status-desc">请稍候</p>
+                    </div>
+                  </div>
+                ) : elevated ? (
+                  <div className="elev-status elev-status--ok" role="status">
+                    <span className="elev-status-icon" aria-hidden="true">
+                      <IconShieldCheck size={24} />
+                    </span>
+                    <div className="elev-status-body">
+                      <strong className="elev-status-title">已以管理员身份提权运行</strong>
+                      <p className="elev-status-desc">
+                        完全支持创建、删除符号链接，一键源仓整理与软链恢复功能均可稳定运行。
+                      </p>
+                    </div>
+                    <span className="elev-status-tag">完全控制</span>
+                  </div>
+                ) : (
+                  <div className="elev-status elev-status--warn" role="status">
+                    <span className="elev-status-icon" aria-hidden="true">
+                      <IconShieldAlert size={24} />
+                    </span>
+                    <div className="elev-status-body">
+                      <strong className="elev-status-title">当前处于普通权限模式</strong>
+                      <p className="elev-status-desc">
+                        可安全浏览、查看与编辑本地技能；若需执行源仓整理或批量建立符号链接，需提升权限。
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={elevating}
+                      onClick={() => void requestElevation()}
+                    >
+                      {elevating ? '正在提权…' : '以管理员身份重启'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 诊断日志 */}
+              <div className="settings-card">
+                <div className="settings-card-head">
+                  <div className="settings-card-icon-pill">
+                    <IconFolderOpen size={20} />
+                  </div>
+                  <div>
+                    <h3 className="settings-card-title">运行诊断与日志</h3>
+                    <p className="settings-card-desc">
+                      操作详情与系统错误会记录在本地日志文件中，用于故障分析与排查。绝不会记录 API Key 或技能敏感正文。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="settings-log-panel-body">
+                  <div className="settings-log-toggle-row">
+                    <div>
+                      <strong>开启详细调试日志（Debug Mode）</strong>
+                      <p className="muted" style={{margin: '2px 0 0', fontSize: '13px'}}>
+                        记录更详细的底层文件操作、扫描轨迹与 HTTP 交互状态。
+                      </p>
+                    </div>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        checked={Boolean(cfg.logDebug)}
+                        aria-checked={Boolean(cfg.logDebug)}
+                        onChange={(e) => {
+                          setCfg({...cfg, logDebug: e.target.checked} as AppConfig)
+                          setStatus('')
+                        }}
+                      />
+                      <span className="switch-ui" aria-hidden="true" />
+                    </label>
+                  </div>
+
+                  <div className="settings-log-dir-box">
+                    <span className="settings-field-label">日志存储目录</span>
+                    <div className="settings-path-input-group">
+                      <input
+                        className="settings-text-input"
+                        readOnly
+                        value={logsDir || '%USERPROFILE%\\.skillsmanager\\logs'}
+                      />
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() =>
+                          void copyText(
+                            logsDir || '%USERPROFILE%\\.skillsmanager\\logs',
+                            'logsDir',
+                          )
+                        }
+                      >
+                        {copiedKey === 'logsDir' ? (
+                          <>
+                            <IconCheck size={14} />
+                            <span>已复制</span>
+                          </>
+                        ) : (
+                          <>
+                            <IconCopy size={14} />
+                            <span>复制</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => void openLogsFolder()}
+                      >
+                        <IconFolderOpen size={15} />
+                        <span>打开日志文件夹</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 新手引导重温 */}
+              <div className="settings-card">
+                <div className="settings-card-head">
+                  <div className="settings-card-icon-pill">
+                    <IconRotateCcw size={20} />
+                  </div>
+                  <div>
+                    <h3 className="settings-card-title">演示与新手引导</h3>
+                    <p className="settings-card-desc">
+                      重新运行沙盒引导漫游，演示源仓整理、按工具开关链接以及分组视图的基本用法（不修改真实磁盘文件）。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="settings-replay-action">
+                  <button
+                    type="button"
+                    className="btn onboarding-replay-btn"
+                    disabled={!onReplayOnboarding}
+                    onClick={() => onReplayOnboarding?.()}
+                  >
+                    <IconRotateCcw size={15} />
+                    <span>重新观看新手引导</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </main>
+      </div>
     </div>
   )
 })
