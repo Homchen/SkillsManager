@@ -25,10 +25,76 @@
   --conflict-resolved-ink: oklch(36% 0.035 160);
   --conflict-resolved-badge-bg: oklch(94.8% 0.016 160);
   --conflict-resolved-rule: oklch(80% 0.025 160);
+
+  /* 全局统一滚动条样式配置（细长、无箭头、不常显） */
+  --scrollbar-size: 6px;
+  --scrollbar-thumb: rgba(100, 116, 139, 0.35);
+  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.6);
+  --scrollbar-thumb-active: rgba(100, 116, 139, 0.85);
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* ==========================================================================
+   全局统一滚动条设计（统一、无上下箭头、不常显、轻量纤细）
+   ========================================================================== */
+
+/* 统一滚动条宽高为 6px（细滚动条） */
+*::-webkit-scrollbar,
+::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+/* 隐藏所有上下及左右箭头按钮 */
+*::-webkit-scrollbar-button,
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* 轨道与拐角全部透明，杜绝常显灰色背景底槽 */
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track-piece,
+*::-webkit-scrollbar-corner,
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-track-piece,
+::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+/* 默认状态下滑块完全透明（不常显），采用完全圆角胶囊造型，设置最小尺寸避免内容过长时缩为点 */
+*::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  min-height: 24px;
+  min-width: 24px;
+  transition: background-color 0.25s ease-out;
+}
+
+/* 当容器鼠标刚进入闪现提示、正在滚动、或内部具有焦点时，滑块平滑显现 */
+*.has-scrollbar-reveal::-webkit-scrollbar-thumb,
+.has-scrollbar-reveal::-webkit-scrollbar-thumb,
+*.is-scrolling::-webkit-scrollbar-thumb,
+.is-scrolling::-webkit-scrollbar-thumb,
+*:focus-within::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+}
+
+/* 鼠标直接指向滑块时的高亮反馈 */
+*::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+/* 鼠标按住并拖拽滑块时的激活状态反馈 */
+*::-webkit-scrollbar-thumb:active,
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-active);
 }
 
 /* 去掉浏览器默认黑色焦点框；键盘导航用主题色轮廓 */
@@ -1352,6 +1418,9 @@ body.is-marquee-selecting * {
   padding: 12px 14px;
   border-radius: 8px;
   overflow: auto;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.28);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
+  --scrollbar-thumb-active: rgba(255, 255, 255, 0.75);
 }
 
 .markdown-preview pre code {
@@ -1496,6 +1565,9 @@ body.is-marquee-selecting * {
   margin-top: 8px;
   background: #0f172a;
   color: #e2e8f0;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.28);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
+  --scrollbar-thumb-active: rgba(255, 255, 255, 0.75);
 }
 
 .markdown-preview .markdown-alert {

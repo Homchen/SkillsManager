@@ -86,6 +86,98 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
+// 滚动条显隐管理：进入可滚动区域或滚动时短暂显现，随后平滑淡出
+const scrollbarRevealTimers = new WeakMap<Element, number>()
+
+function triggerScrollbarReveal(target: Element, duration = 1200) {
+  target.classList.add('has-scrollbar-reveal')
+
+  const existingTimer = scrollbarRevealTimers.get(target)
+  if (existingTimer !== undefined) {
+    window.clearTimeout(existingTimer)
+  }
+
+  const timer = window.setTimeout(() => {
+    target.classList.remove('has-scrollbar-reveal')
+    scrollbarRevealTimers.delete(target)
+  }, duration)
+
+  scrollbarRevealTimers.set(target, timer)
+}
+
+function canElementScroll(el: HTMLElement): boolean {
+  // 必须实际产生可滚动溢出（容差 1px 避免浮点数舍入误差）
+  const hasOverflowY = el.scrollHeight > el.clientHeight + 1
+  const hasOverflowX = el.scrollWidth > el.clientWidth + 1
+  if (!hasOverflowY && !hasOverflowX) return false
+
+  const style = window.getComputedStyle(el)
+  const oy = style.overflowY
+  const ox = style.overflowX
+  const canY = hasOverflowY && (oy === 'auto' || oy === 'scroll')
+  const canX = hasOverflowX && (ox === 'auto' || ox === 'scroll')
+  return canY || canX
+}
+
+function findScrollableContainer(start: Element | null): HTMLElement | null {
+  let curr: Element | null = start
+  while (curr && curr !== document.body && curr !== document.documentElement) {
+    if (curr instanceof HTMLElement && canElementScroll(curr)) {
+      return curr
+    }
+    curr = curr.parentElement
+  }
+  if (document.documentElement && canElementScroll(document.documentElement)) {
+    return document.documentElement
+  }
+  return null
+}
+
+let activeScrollContainer: HTMLElement | null = null
+
+// 鼠标进入新的可滚动区域时，让滚动条出现一下以提示当前位置与范围
+window.addEventListener(
+  'mouseover',
+  (e) => {
+    const rawTarget = e.target
+    if (!(rawTarget instanceof Element)) return
+    const container = findScrollableContainer(rawTarget)
+    if (container !== activeScrollContainer) {
+      activeScrollContainer = container
+      if (container) {
+        triggerScrollbarReveal(container, 1200)
+      }
+    }
+  },
+  {passive: true},
+)
+
+// 鼠标移出窗口时重置当前激活容器，下次重新移入时可再次触发
+window.addEventListener('mouseleave', () => {
+  activeScrollContainer = null
+})
+
+// 滚动时持续激活滚动条显现
+window.addEventListener(
+  'scroll',
+  (e) => {
+    const rawTarget = e.target
+    const target =
+      rawTarget === document || rawTarget === document.documentElement
+        ? document.documentElement
+        : rawTarget instanceof Element
+          ? rawTarget
+          : null
+
+    if (!target) return
+    if (target instanceof HTMLElement) {
+      activeScrollContainer = target
+    }
+    triggerScrollbarReveal(target, 1000)
+  },
+  {capture: true, passive: true},
+)
+
 const container = document.getElementById('root')
 const root = createRoot(container!)
 
