@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import {GetSkillUsageSummary} from '../../wailsjs/go/main/App'
 import {AppToast, useAppToast} from '../components/AppToast'
+import AutoScrollText from '../components/AutoScrollText'
 import UsageTrendChart from '../components/UsageTrendChart'
 import {
   IconActivity,
@@ -314,9 +315,15 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
             </div>
           </div>
           <div className="usage-kpi-value-row">
-            <span className="usage-kpi-top-title" title={metrics.topSkill?.item.name || metrics.topSkill?.item.id || '暂无数据'}>
-              {metrics.topSkill ? (metrics.topSkill.item.name || metrics.topSkill.item.id) : '—'}
-            </span>
+            {metrics.topSkill ? (
+              <AutoScrollText
+                text={metrics.topSkill.item.name || metrics.topSkill.item.id}
+                className="usage-kpi-top-title"
+                title={metrics.topSkill.item.name || metrics.topSkill.item.id}
+              />
+            ) : (
+              <span className="usage-kpi-top-title">—</span>
+            )}
           </div>
           <div className="usage-kpi-foot muted">
             {metrics.topSkill ? (
@@ -420,9 +427,12 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
 
                           {/* 技能信息 */}
                           <div className="usage-rank-main">
-                            <span className="usage-rank-name" title={item.name || item.id}>
-                              {item.name || item.id}
-                            </span>
+                            <AutoScrollText
+                              text={item.name || item.id}
+                              className="usage-rank-name"
+                              mode="hover"
+                              title={item.name || item.id}
+                            />
                             <span className="usage-rank-id" title={item.id}>
                               {item.id}
                             </span>
@@ -467,11 +477,15 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
             <div className="usage-trend-header">
               <div className="usage-trend-title-block">
                 <div className="usage-trend-title-line">
-                  <h3>
+                  <h3 className="usage-trend-title">
                     {selected ? (
                       <>
-                        <span className="usage-trend-highlight">{selected.name || selected.id}</span>
-                        <span className="usage-trend-tail"> 的调用趋势</span>
+                        <AutoScrollText
+                          text={selected.name || selected.id}
+                          className="usage-trend-highlight"
+                          title={selected.name || selected.id}
+                        />
+                        <span className="usage-trend-tail">的调用趋势</span>
                       </>
                     ) : (
                       '全体技能调用趋势'
@@ -481,7 +495,14 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
                     <span className="usage-tag-share">占区间总量 {selectedShare}</span>
                   ) : null}
                 </div>
-                <p className="muted">
+                <p
+                  className="muted usage-trend-subtitle"
+                  title={
+                    selected
+                      ? `技能 ID: ${selected.id} · ${rangeLabel}累计使用 ${selectedScore} 次`
+                      : `展示 ${rangeLabel}内全体技能的日度使用活跃走势`
+                  }
+                >
                   {selected
                     ? `技能 ID: ${selected.id} · ${rangeLabel}累计使用 ${selectedScore} 次`
                     : `展示 ${rangeLabel}内全体技能的日度使用活跃走势`}
@@ -502,17 +523,19 @@ export default function UsagePage({onOpenEditor, active = true}: Props) {
                   <>
                     <button
                       type="button"
-                      className="btn btn-ghost"
+                      className="btn btn-ghost usage-btn-back"
                       onClick={() => setSelectedId(null)}
+                      title="清除技能选中，返回查看全体趋势"
                     >
                       查看全体
                     </button>
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className="btn btn-primary usage-btn-edit"
                       onClick={() => onOpenEditor(selected.id)}
+                      title="在技能编辑器中打开该技能"
                     >
-                      <IconPencil size={15} />
+                      <IconPencil size={14} />
                       <span>打开编辑</span>
                     </button>
                   </>
