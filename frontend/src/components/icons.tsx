@@ -1,13 +1,15 @@
-import type {ReactNode} from 'react'
+import type {CSSProperties, ReactNode} from 'react'
 
 type IconProps = {
   size?: number
   className?: string
+  style?: CSSProperties
 }
 
 function Icon({
   size = 20,
   className,
+  style,
   children,
 }: IconProps & {children: ReactNode}) {
   return (
@@ -22,6 +24,7 @@ function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
+      style={style}
       aria-hidden="true"
     >
       {children}

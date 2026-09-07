@@ -18,11 +18,34 @@ import {
 import {EventsOff, EventsOn} from '../../wailsjs/runtime/runtime'
 import type {domain} from '../../wailsjs/go/models'
 import ThreeWayMerge from '../components/ThreeWayMerge'
-import {normalizeText} from '../lib/lineDiff'
+import {AppToast, useAppToast} from '../components/AppToast'
 import {
+  IconActivity,
+  IconAlertTriangle,
+  IconArrowLeft,
+  IconCheck,
+  IconChevron,
+  IconCopy,
+  IconFolderPlus,
+  IconFolderSync,
+  IconLink,
+  IconRefresh,
+  IconRotateCcw,
+  IconSearch,
+  IconShieldAlert,
+  IconShieldCheck,
+  IconSparkles,
+  IconWrench,
+  IconX,
+} from '../components/icons'
+import {normalizeText} from '../lib/lineDiff'
+import {getToolBadge} from '../lib/toolBadge'
+import {
+  calculateOrganizeMetrics,
   conflictFileProgress,
   conflictRoundNeedsApply,
   conflictSkillNeedsAttention,
+  detectToolFromPath,
   errMsg,
   filterActionSectionsByQuery,
   groupActionsByType,
@@ -38,20 +61,53 @@ type OrganizeReport = domain.OrganizeReport
 type SuggestedWorkdir = domain.SuggestedWorkdir
 type RestoreOrphanItem = domain.RestoreOrphanItem
 
-const ACTION_LABELS: Record<string, string> = {
-  skip: '跳过',
-  move_to_hub: '迁入源仓',
-  replace_with_symlink: '替换为链接',
-  merge_conflict: '合并冲突',
-  fix_link: '修复断链',
-  skipped_by_user: '用户跳过',
+const ACTION_CONFIG: Record<
+  string,
+  {label: string; description: string; icon: typeof IconFolderPlus; toneClass: string}
+> = {
+  move_to_hub: {
+    label: '待迁入源仓',
+    description: '将工具目录中的散落副本迁移至中心源仓',
+    icon: IconFolderPlus,
+    toneClass: 'type-move_to_hub',
+  },
+  replace_with_symlink: {
+    label: '待替换软链',
+    description: '在原工具目录建立指向源仓的符号链接',
+    icon: IconLink,
+    toneClass: 'type-replace_with_symlink',
+  },
+  merge_conflict: {
+    label: '内容冲突',
+    description: '多来源同名技能内容不一致，需人工决议',
+    icon: IconAlertTriangle,
+    toneClass: 'type-merge_conflict',
+  },
+  fix_link: {
+    label: '修复断链',
+    description: '纠偏损坏失效的外部符号链接',
+    icon: IconWrench,
+    toneClass: 'type-fix_link',
+  },
+  skip: {
+    label: '保持跳过',
+    description: '已正确链接或处于规范状态，无需操作',
+    icon: IconCheck,
+    toneClass: 'type-skip',
+  },
+  skipped_by_user: {
+    label: '用户跳过',
+    description: '由您手动跳过的动作',
+    icon: IconCheck,
+    toneClass: 'type-skipped_by_user',
+  },
 }
 
 const FILE_STATUS_LABELS: Record<string, string> = {
-  only_a: '仅侧 A',
-  only_b: '仅侧 B',
+  only_a: '仅侧 A（保留）',
+  only_b: '仅侧 B（保留）',
   both_same: '两侧相同',
-  both_diff: '两侧不同',
+  both_diff: '两侧存在差异',
 }
 
 function bothDiffResolved(file: {status: string; choice?: string; mergedContent?: string}): boolean {
@@ -107,7 +163,6 @@ export default function OrganizePage({onBack}: Props) {
   const [restoringOrphans, setRestoringOrphans] = useState(false)
   const [restoreDialogError, setRestoreDialogError] = useState('')
   const [error, setError] = useState('')
-  const [status, setStatus] = useState('')
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [executing, setExecuting] = useState(false)
   const planRef = useRef<OrganizePlan | null>(null)
@@ -118,6 +173,10 @@ export default function OrganizePage({onBack}: Props) {
   const [deepProgress, setDeepProgress] = useState('')
   const [applyingRound, setApplyingRound] = useState(false)
   const [actionQuery, setActionQuery] = useState('')
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const {toast, showToast, dismissToast} = useAppToast()
+
   /** 默认折叠「跳过」分组 */
   const [collapsedActionTypes, setCollapsedActionTypes] = useState<Set<string>>(
     () => new Set(['skip']),
@@ -135,6 +194,15 @@ export default function OrganizePage({onBack}: Props) {
       return next
     })
   }
+
+  const copyText = useCallback((text: string, id: string) => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id)
+      setTimeout(() => {
+        setCopiedId((curr) => (curr === id ? null : curr))
+      }, 1500)
+    })
+  }, [])
 
   const refreshGate = useCallback(async () => {
     if (!plan) {
@@ -156,14 +224,6 @@ export default function OrganizePage({onBack}: Props) {
   useEffect(() => {
     void refreshGate()
   }, [refreshGate, plan])
-
-  useEffect(() => {
-    const list = plan?.conflicts ?? []
-    if (list.length === 0) return
-    if (list.every((c) => !conflictSkillNeedsAttention(c))) {
-      setStatus((prev) => (prev.startsWith('还有') ? '' : prev))
-    }
-  }, [plan])
 
   const refreshRestoreOrphanDetection = useCallback(
     async (opts?: {silent?: boolean}) => {
@@ -248,7 +308,6 @@ export default function OrganizePage({onBack}: Props) {
     const seq = ++previewSeqRef.current
     setLoadingPreview(true)
     setError('')
-    setStatus('')
     setReport(null)
     setReportOpen(false)
     setDialogError('')
@@ -260,7 +319,10 @@ export default function OrganizePage({onBack}: Props) {
       resetActionGroupCollapse()
       applyPlan(next, {clearReport: true, openConflict: conflicts.length > 0})
       setActiveConflictId(conflicts[0]?.skillId ?? null)
-      setStatus(`已生成预览：${(next.actions ?? []).length} 项动作，${conflicts.length} 项冲突`)
+      showToast({
+        message: `整理预览就绪：${(next.actions ?? []).length} 项动作${conflicts.length ? `，${conflicts.length} 项冲突` : ''}`,
+        tone: 'success',
+      })
     } catch (e) {
       if (seq !== previewSeqRef.current) return
       setError(errMsg(e))
@@ -305,7 +367,6 @@ export default function OrganizePage({onBack}: Props) {
     await commitPlanActions(actions)
   }
 
-  /** 仅切换给定下标（用于搜索过滤后的全选，不影响未展示项） */
   async function handleToggleIndices(indices: number[], selected: boolean) {
     const base = planRef.current
     if (!base || indices.length === 0) return
@@ -321,7 +382,7 @@ export default function OrganizePage({onBack}: Props) {
     try {
       const next = await SkipConflict(skillId)
       applyPlan(next)
-      setStatus(`已跳过冲突技能：${skillId}`)
+      showToast({message: `已跳过冲突技能：${skillId}`, tone: 'info'})
     } catch (e) {
       setDialogError(errMsg(e))
     }
@@ -332,7 +393,7 @@ export default function OrganizePage({onBack}: Props) {
     try {
       const next = await ResetConflict(skillId)
       applyPlan(next)
-      setStatus(`已撤销选择：${skillId}`)
+      showToast({message: `已重置选择：${skillId}`, tone: 'info'})
     } catch (e) {
       setDialogError(errMsg(e))
     }
@@ -359,7 +420,6 @@ export default function OrganizePage({onBack}: Props) {
   async function handleExecute() {
     setExecuting(true)
     setError('')
-    setStatus('')
     try {
       const gate = normalizeCanExecute(await CanExecuteOrganize())
       if (!gate.ok) {
@@ -370,7 +430,7 @@ export default function OrganizePage({onBack}: Props) {
       const result = await ExecuteOrganize()
       setReport(result)
       setReportOpen(true)
-      setStatus('整理执行完成')
+      showToast({message: '整理执行完成！已归集至源仓并建立软链', tone: 'success'})
       const sugs = result.suggestedWorkdirs ?? []
       if (sugs.length > 0) {
         setWorkdirSuggestions(sugs)
@@ -426,9 +486,10 @@ export default function OrganizePage({onBack}: Props) {
       const result = await ConfirmAddWorkdirs(paths)
       const added = result.added?.length ?? 0
       const linked = result.linked?.length ?? 0
-      const skipped = result.skipped?.length ?? 0
-      const failed = result.failed?.length ?? 0
-      setStatus(`工作目录：添加 ${added} · 建链 ${linked} · 跳过 ${skipped} · 失败 ${failed}`)
+      showToast({
+        message: `工作目录已添加：${added} 个目录，建立 ${linked} 个链接`,
+        tone: 'success',
+      })
       closeWorkdirDialog()
     } catch (e) {
       setWorkdirDialogError(errMsg(e))
@@ -441,10 +502,12 @@ export default function OrganizePage({onBack}: Props) {
     setDeepScanning(true)
     setDeepProgress('')
     setError('')
-    setStatus('')
     try {
       const extras = await DeepScanSkills()
-      setStatus(`深度扫描完成，发现 ${(extras ?? []).length} 个额外技能；请重新生成预览`)
+      showToast({
+        message: `深度扫描完成，发现 ${(extras ?? []).length} 个额外技能，请重新生成预览`,
+        tone: 'info',
+      })
     } catch (e) {
       setError(errMsg(e))
     } finally {
@@ -455,7 +518,7 @@ export default function OrganizePage({onBack}: Props) {
 
   function handleCancelDeepScan() {
     void CancelDeepScan()
-    setStatus('已请求取消深度扫描…')
+    showToast({message: '已请求取消深度扫描…', tone: 'info'})
   }
 
   function closeRestoreDialog() {
@@ -466,7 +529,6 @@ export default function OrganizePage({onBack}: Props) {
 
   async function handleScanRestoreOrphans() {
     setError('')
-    setStatus('')
     setRestoreDialogError('')
     if (restoreItems.length > 0) {
       setRestoreDialogOpen(true)
@@ -474,11 +536,10 @@ export default function OrganizePage({onBack}: Props) {
     }
     const items = await refreshRestoreOrphanDetection()
     if (items.length === 0) {
-      setStatus('未发现可恢复的误迁符号链接')
+      showToast({message: '未发现可恢复的误迁符号链接', tone: 'info'})
       setRestoreDialogOpen(false)
     } else {
       setRestoreDialogOpen(true)
-      setStatus(`发现 ${items.length} 个可恢复的误迁链接`)
     }
   }
 
@@ -499,7 +560,10 @@ export default function OrganizePage({onBack}: Props) {
       const result = await RestoreOrphanLinks(paths)
       const ok = result.succeeded?.length ?? 0
       const failed = result.failed ?? []
-      setStatus(`误迁恢复：成功 ${ok} · 失败 ${failed.length}`)
+      showToast({
+        message: `误迁恢复完成：成功 ${ok} · 失败 ${failed.length}`,
+        tone: failed.length > 0 ? 'warn' : 'success',
+      })
       if (failed.length > 0) {
         setRestoreDialogError(
           failed.map((f) => `${f.skillId}: ${f.message}`).join('\n'),
@@ -531,7 +595,7 @@ export default function OrganizePage({onBack}: Props) {
     try {
       const next = await ApplyConflictRound(skillId)
       applyPlan(next)
-      setStatus(`已应用合并轮次：${skillId}`)
+      showToast({message: `已应用本轮合并：${skillId}`, tone: 'success'})
     } catch (e) {
       setDialogError(errMsg(e))
     } finally {
@@ -554,21 +618,31 @@ export default function OrganizePage({onBack}: Props) {
   function closeConflictDialog() {
     setConflictOpen(false)
     setDialogError('')
-    const needs = (plan?.conflicts ?? []).filter(conflictSkillNeedsAttention)
-    if (needs.length > 0) {
-      setStatus(`还有 ${needs.length} 个技能的冲突待处理`)
-    } else {
-      // 已全部决议时清掉灰色状态行，避免与蓝色 info-banner 矛盾
-      setStatus('')
-    }
   }
 
   const conflicts = plan?.conflicts ?? []
   const actions = plan?.actions ?? []
+  const metrics = useMemo(
+    () => calculateOrganizeMetrics(actions, conflicts),
+    [actions, conflicts],
+  )
   const actionSections = useMemo(() => groupActionsByType(actions), [actions])
+
+  // 按类型过滤
+  const typeFilteredSections = useMemo(() => {
+    if (selectedTypeFilter === 'all') return actionSections
+    if (selectedTypeFilter === 'skip') {
+      return actionSections.filter(
+        (sec) => sec.type === 'skip' || sec.type === 'skipped_by_user',
+      )
+    }
+    return actionSections.filter((sec) => sec.type === selectedTypeFilter)
+  }, [actionSections, selectedTypeFilter])
+
+  // 按搜索词过滤
   const filteredActionSections = useMemo(
-    () => filterActionSectionsByQuery(actionSections, actionQuery),
-    [actionSections, actionQuery],
+    () => filterActionSectionsByQuery(typeFilteredSections, actionQuery),
+    [typeFilteredSections, actionQuery],
   )
   const visibleIndexedActions = useMemo(
     () => filteredActionSections.flatMap((sec) => sec.items),
@@ -587,212 +661,826 @@ export default function OrganizePage({onBack}: Props) {
   )
   const activeConflict =
     conflicts.find((c) => c.skillId === activeConflictId) ?? conflicts[0] ?? null
-  const attentionConflictCount = conflicts.filter(conflictSkillNeedsAttention).length
+  const attentionConflictCount = metrics.unresolvedConflictCount
   const allConflictsDecided =
     conflicts.length > 0 && attentionConflictCount === 0
 
   return (
     <div className="organize-page">
-      <div className="page-toolbar">
-        <button type="button" className="btn" onClick={onBack}>
-          返回
-        </button>
-        <h2 className="page-title">一键整理</h2>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={loadingPreview}
-          onClick={() => void handlePreview()}
-        >
-          {loadingPreview ? '生成中…' : '生成预览'}
-        </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={deepScanning}
-          onClick={() => void handleDeepScan()}
-        >
-          {deepScanning ? '扫描中…' : '深度扫描'}
-        </button>
-        {deepScanning ? (
-          <button type="button" className="btn" onClick={handleCancelDeepScan}>
-            取消扫描
+      <AppToast toast={toast} onDismiss={dismissToast} />
+
+      {/* 顶部粘性全局控制栏 */}
+      <header className="organize-header">
+        <div className="organize-header-left">
+          <button
+            type="button"
+            className="organize-back-btn"
+            onClick={onBack}
+            data-tour="demo-back"
+            title="返回技能列表"
+          >
+            <IconArrowLeft size={16} />
+            <span>返回技能</span>
           </button>
-        ) : null}
-        {restoreOrphansAvailable ? (
+          <div className="organize-header-divider" />
+          <div className="organize-header-icon">
+            <IconFolderSync size={20} />
+          </div>
+          <div className="organize-header-titles">
+            <div className="organize-title-row">
+              <h2 className="organize-title">一键整理</h2>
+              {!plan ? (
+                <span className="organize-status-pill is-idle">
+                  <span className="organize-status-dot" />
+                  未扫描
+                </span>
+              ) : attentionConflictCount > 0 ? (
+                <span className="organize-status-pill is-attention">
+                  <span className="organize-status-dot is-pulse" />
+                  {attentionConflictCount} 项冲突待决议
+                </span>
+              ) : allConflictsDecided ? (
+                <span className="organize-status-pill is-success">
+                  <span className="organize-status-dot" />
+                  冲突已全部决议
+                </span>
+              ) : canExecute ? (
+                <span className="organize-status-pill is-ready">
+                  <span className="organize-status-dot" />
+                  {metrics.toggleableCount === 0
+                    ? '就绪（全部已规范）'
+                    : `就绪（已选 ${metrics.selectedCount}/${metrics.toggleableCount} 项）`}
+                </span>
+              ) : (
+                <span className="organize-status-pill is-idle">
+                  <span className="organize-status-dot" />
+                  待就绪
+                </span>
+              )}
+            </div>
+            <p
+              className="organize-subtitle"
+              title="将各 AI 工具中的技能统一归集至中心源仓，并自动建立透明符号链接"
+            >
+              将各 AI 工具中的技能统一归集至中心源仓，并自动建立透明符号链接
+            </p>
+          </div>
+        </div>
+
+        <div className="organize-header-right">
+          {restoreOrphansAvailable ? (
+            <button
+              type="button"
+              className="btn"
+              disabled={restoreScanning || restoringOrphans || deepScanning}
+              onClick={() => void handleScanRestoreOrphans()}
+              title="恢复误建的指向源仓的符号链接"
+            >
+              <IconRotateCcw size={15} />
+              <span>{restoreScanning ? '扫描中…' : '恢复误迁链接'}</span>
+            </button>
+          ) : null}
+
+          {report ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setReportOpen(true)}
+              title="查看最近一次整理的执行报告"
+            >
+              <IconActivity size={15} />
+              <span>执行报告</span>
+            </button>
+          ) : null}
+
           <button
             type="button"
             className="btn"
-            disabled={restoreScanning || restoringOrphans || deepScanning}
-            onClick={() => void handleScanRestoreOrphans()}
+            disabled={deepScanning}
+            onClick={() => (deepScanning ? handleCancelDeepScan() : void handleDeepScan())}
+            title="深度扫描整个磁盘或工作区查找未登记的技能"
           >
-            {restoreScanning ? '扫描误迁…' : '恢复误迁链接'}
+            <IconSearch size={15} />
+            <span>{deepScanning ? '取消扫描' : '深度扫描'}</span>
           </button>
-        ) : null}
-        {conflicts.length > 0 ? (
-          <button type="button" className="btn" onClick={() => openConflictDialog()}>
-            {allConflictsDecided
-              ? `查看冲突（已全部决议）`
-              : `处理冲突（待处理 ${attentionConflictCount}/${conflicts.length}）`}
-          </button>
-        ) : null}
-        {report ? (
-          <button type="button" className="btn" onClick={() => setReportOpen(true)}>
-            查看执行报告
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!plan || !canExecute || executing || loadingPreview}
-          onClick={() => void handleExecute()}
-        >
-          {executing ? '执行中…' : '开始执行'}
-        </button>
-      </div>
 
-      {error ? <div className="error-banner">{error}</div> : null}
-      {status ? <p className="muted status-line">{status}</p> : null}
+          {plan ? (
+            <button
+              type="button"
+              className="btn"
+              disabled={loadingPreview || executing}
+              onClick={() => void handlePreview()}
+              title="重新扫描各工具目录生成最新预览"
+            >
+              <IconRefresh size={15} className={loadingPreview ? 'is-spinning' : ''} />
+              <span>重新预览</span>
+            </button>
+          ) : null}
+
+          {plan && attentionConflictCount > 0 ? (
+            <button
+              type="button"
+              className="btn btn-attention"
+              onClick={() => openConflictDialog()}
+              title="存在同名内容冲突，必须先决议才能执行整理"
+            >
+              <IconAlertTriangle size={15} />
+              <span>解决冲突 ({attentionConflictCount})</span>
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            className="btn btn-primary btn-execute"
+            data-tour={!plan ? 'demo-preview' : 'demo-execute'}
+            disabled={!plan ? loadingPreview : !canExecute || executing || loadingPreview}
+            onClick={() => (!plan ? void handlePreview() : void handleExecute())}
+          >
+            {!plan ? (
+              <>
+                <IconFolderSync size={16} className={loadingPreview ? 'is-spinning' : ''} />
+                <span>{loadingPreview ? '正在扫描…' : '生成整理预览'}</span>
+              </>
+            ) : executing ? (
+              <>
+                <IconRefresh size={16} className="is-spinning" />
+                <span>正在执行…</span>
+              </>
+            ) : (
+              <>
+                <IconCheck size={16} />
+                <span>开始执行整理</span>
+              </>
+            )}
+          </button>
+        </div>
+      </header>
+
+      {/* 3步工作流指示器 */}
+      <section className="organize-pipeline" aria-label="整理执行进度">
+        <div
+          className={`organize-pipeline-step ${
+            plan ? 'is-completed' : 'is-current'
+          }`}
+        >
+          <div className="organize-step-badge">{plan ? '✓' : '1'}</div>
+          <div className="organize-step-text">
+            <span className="organize-step-title">1. 扫描与发现</span>
+            <span
+              className="organize-step-desc"
+              title={
+                !plan
+                  ? loadingPreview
+                    ? '正在扫描所有工具目录…'
+                    : '检测散落技能与失效链接'
+                  : `已发现 ${actions.length} 项动作，${conflicts.length} 处冲突`
+              }
+            >
+              {!plan
+                ? loadingPreview
+                  ? '正在扫描所有工具目录…'
+                  : '检测散落技能与失效链接'
+                : `已发现 ${actions.length} 项动作，${conflicts.length} 处冲突`}
+            </span>
+          </div>
+        </div>
+
+        <div className="organize-pipeline-separator" aria-hidden="true">
+          <IconChevron size={14} />
+        </div>
+
+        <div
+          className={`organize-pipeline-step ${
+            !plan
+              ? ''
+              : attentionConflictCount > 0
+                ? 'is-attention'
+                : 'is-completed'
+          }`}
+        >
+          <div className="organize-step-badge">
+            {!plan ? '2' : attentionConflictCount > 0 ? '!' : '✓'}
+          </div>
+          <div className="organize-step-text">
+            <span className="organize-step-title">2. 审查与冲突决议</span>
+            <span
+              className="organize-step-desc"
+              title={
+                !plan
+                  ? '核对迁入清单与三向合并'
+                  : attentionConflictCount > 0
+                    ? `尚有 ${attentionConflictCount} 个冲突待处理`
+                    : conflicts.length > 0
+                      ? '所有文件冲突已全部决议'
+                      : '无内容冲突，可直接执行'
+              }
+            >
+              {!plan
+                ? '核对迁入清单与三向合并'
+                : attentionConflictCount > 0
+                  ? `尚有 ${attentionConflictCount} 个冲突待处理`
+                  : conflicts.length > 0
+                    ? '所有文件冲突已全部决议'
+                    : '无内容冲突，可直接执行'}
+            </span>
+          </div>
+        </div>
+
+        <div className="organize-pipeline-separator" aria-hidden="true">
+          <IconChevron size={14} />
+        </div>
+
+        <div
+          className={`organize-pipeline-step ${
+            report ? 'is-completed' : canExecute ? 'is-current' : ''
+          }`}
+        >
+          <div className="organize-step-badge">{report ? '✓' : '3'}</div>
+          <div className="organize-step-text">
+            <span className="organize-step-title">3. 归集迁移与建链</span>
+            <span
+              className="organize-step-desc"
+              title={
+                report
+                  ? '整理已完成，符号链接生效中'
+                  : canExecute
+                    ? metrics.toggleableCount === 0
+                      ? '方案就绪，所有技能均已规范'
+                      : '方案就绪，点击开始执行'
+                    : '等待前置步骤完成'
+              }
+            >
+              {report
+                ? '整理已完成，符号链接生效中'
+                : canExecute
+                  ? metrics.toggleableCount === 0
+                    ? '方案就绪，所有技能均已规范'
+                    : '方案就绪，点击开始执行'
+                  : '等待前置步骤完成'}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* 错误与状态提示条 */}
+      {error ? (
+        <div className="error-banner">
+          <span>{error}</span>
+          <button type="button" className="link-btn" onClick={() => setError('')}>
+            关闭
+          </button>
+        </div>
+      ) : null}
+
       {deepScanning && deepProgress ? (
-        <p className="muted status-line mono">扫描中：{deepProgress}</p>
+        <div className="organize-progress-banner">
+          <div className="organize-progress-text">
+            <IconSearch size={16} className="is-spinning" />
+            <span>深度扫描进行中：</span>
+            <span className="mono">{deepProgress}</span>
+          </div>
+          <button type="button" className="btn btn-sm" onClick={handleCancelDeepScan}>
+            取消扫描
+          </button>
+        </div>
       ) : null}
+
       {restoreScanning && restoreProgress ? (
-        <p className="muted status-line mono">扫描误迁：{restoreProgress}</p>
+        <div className="organize-progress-banner">
+          <div className="organize-progress-text">
+            <IconRotateCcw size={16} className="is-spinning" />
+            <span>扫描误迁符号链接中：</span>
+            <span className="mono">{restoreProgress}</span>
+          </div>
+        </div>
       ) : null}
+
       {plan && canExecute && allConflictsDecided ? (
         <div className="info-banner">
-          冲突已全部决议，请点击「开始执行」写入源仓并建链接（列表里仍会暂时显示「合并冲突」）。
+          <span>
+            冲突已全部决议完成！请点击右上角「开始执行整理」完成向源仓迁入并挂载符号链接。
+          </span>
         </div>
       ) : null}
+
       {plan && !canExecute && blockReason ? (
         <div className="warn-banner">
-          {blockReason}
+          <span>{blockReason}</span>
           {conflicts.length > 0 ? (
-            <>
-              {' '}
-              <button type="button" className="link-btn" onClick={() => openConflictDialog()}>
-                打开冲突处理
-              </button>
-            </>
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => openConflictDialog()}
+              style={{marginLeft: 8, fontWeight: 600}}
+            >
+              立即打开冲突处理
+            </button>
           ) : null}
         </div>
       ) : null}
 
+      {/* 核心内容区 */}
       {!plan ? (
-        <div className="empty-state">点击「生成预览」查看整理计划。</div>
+        <section className="organize-hero">
+          <div className="organize-hero-badge">
+            <IconSparkles size={14} />
+            <span>智能化多工具协同整理</span>
+          </div>
+          <h3 className="organize-hero-title">将散落的 Skills 统一归集至唯一源仓</h3>
+          <p className="organize-hero-desc">
+            当您同时使用 Cursor、Claude、VS Code、Windsurf 等多个开发工具时，技能文件往往分散多处且容易版本脱节。一键整理能安全将所有技能集中管理，并透明建立系统级符号链接。
+          </p>
+
+          <div className="organize-hero-pillars">
+            <div className="organize-hero-pillar">
+              <div className="organize-pillar-head">
+                <div className="organize-pillar-icon tone-hub">
+                  <IconFolderPlus size={18} />
+                </div>
+                <span>单一真实源仓</span>
+              </div>
+              <p className="organize-pillar-text">
+                将各处孤立副本统一搬迁到规范源仓目录，彻底杜绝多端修改带来的不同步与副本冗余。
+              </p>
+            </div>
+
+            <div className="organize-hero-pillar">
+              <div className="organize-pillar-head">
+                <div className="organize-pillar-icon tone-symlink">
+                  <IconLink size={18} />
+                </div>
+                <span>无感符号链接</span>
+              </div>
+              <p className="organize-pillar-text">
+                在原工具侧原地创建符号链接，所有 AI 编程助手开箱即用无缝读取，零破坏零配置。
+              </p>
+            </div>
+
+            <div className="organize-hero-pillar">
+              <div className="organize-pillar-head">
+                <div className="organize-pillar-icon tone-merge">
+                  <IconAlertTriangle size={18} />
+                </div>
+                <span>行级三向合并</span>
+              </div>
+              <p className="organize-pillar-text">
+                检测到同名技能差异时提供清晰的三向差异合并工具，保证您的每一处改动都不会被静默覆盖。
+              </p>
+            </div>
+          </div>
+
+          <div className="organize-hero-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-hero-primary"
+              disabled={loadingPreview}
+              onClick={() => void handlePreview()}
+            >
+              <IconFolderSync size={16} className={loadingPreview ? 'is-spinning' : ''} />
+              <span>{loadingPreview ? '正在扫描生成中…' : '立即开始扫描并生成预览'}</span>
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={deepScanning}
+              onClick={() => void handleDeepScan()}
+            >
+              <IconSearch size={16} />
+              <span>全盘深度扫描</span>
+            </button>
+          </div>
+        </section>
       ) : (
-        <section className="panel">
-          <div className="section-head">
-            <h3>{report ? '执行计划（执行后重新扫描）' : '执行计划'}</h3>
-            {selectionAll.toggleableCount > 0 ? (
-              <label className="organize-select-all">
-                <input
-                  type="checkbox"
-                  checked={selectionAll.checked}
-                  disabled={executing || visibleSelectableIndices.length === 0}
-                  ref={(el) => {
-                    if (el) el.indeterminate = selectionAll.indeterminate
-                  }}
-                  onChange={(e) =>
-                    void handleToggleIndices(visibleSelectableIndices, e.target.checked)
-                  }
-                  aria-label={actionQuery.trim() ? '全选当前搜索结果' : '全选可执行动作'}
-                />
-                全选
-                <span className="muted">
-                  （{selectionAll.selectedCount}/{selectionAll.toggleableCount}）
+        <>
+          {/* 5 个核心指标看板卡片 (KPI Summary Grid) */}
+          <section className="organize-kpis" aria-label="整理动作统计">
+            <div
+              className={`organize-kpi-card ${
+                metrics.moveToHubCount === 0 ? 'is-zero' : 'is-highlight tone-move'
+              } ${selectedTypeFilter === 'move_to_hub' ? 'is-active' : ''}`}
+              onClick={() =>
+                setSelectedTypeFilter((curr) =>
+                  curr === 'move_to_hub' ? 'all' : 'move_to_hub',
+                )
+              }
+              title="点击按「待迁入源仓」筛选"
+            >
+              <div className="organize-kpi-card-head">
+                <span className="organize-kpi-title">待迁入源仓</span>
+                <div className="organize-kpi-icon-wrap tone-move">
+                  <IconFolderPlus size={16} />
+                </div>
+              </div>
+              <div className="organize-kpi-value-row">
+                <span className="organize-kpi-number">{metrics.moveToHubCount}</span>
+                <span className="organize-kpi-unit">项</span>
+              </div>
+              <span className="organize-kpi-desc">
+                {metrics.moveToHubCount === 0 ? '散落副本已全部归集' : '将散落副本搬入源仓'}
+              </span>
+            </div>
+
+            <div
+              className={`organize-kpi-card ${
+                metrics.replaceWithSymlinkCount === 0 ? 'is-zero' : 'is-highlight tone-link'
+              } ${selectedTypeFilter === 'replace_with_symlink' ? 'is-active' : ''}`}
+              onClick={() =>
+                setSelectedTypeFilter((curr) =>
+                  curr === 'replace_with_symlink' ? 'all' : 'replace_with_symlink',
+                )
+              }
+              title="点击按「待替换软链」筛选"
+            >
+              <div className="organize-kpi-card-head">
+                <span className="organize-kpi-title">待替换软链</span>
+                <div className="organize-kpi-icon-wrap tone-link">
+                  <IconLink size={16} />
+                </div>
+              </div>
+              <div className="organize-kpi-value-row">
+                <span className="organize-kpi-number">{metrics.replaceWithSymlinkCount}</span>
+                <span className="organize-kpi-unit">项</span>
+              </div>
+              <span className="organize-kpi-desc">
+                {metrics.replaceWithSymlinkCount === 0 ? '符号链接均已就绪' : '在工具目录创建链接'}
+              </span>
+            </div>
+
+            <div
+              className={`organize-kpi-card ${
+                metrics.mergeConflictCount === 0 ? 'is-zero' : 'is-highlight tone-conflict'
+              } ${selectedTypeFilter === 'merge_conflict' ? 'is-active' : ''}`}
+              onClick={() => {
+                if (attentionConflictCount > 0) {
+                  openConflictDialog()
+                } else {
+                  setSelectedTypeFilter((curr) =>
+                    curr === 'merge_conflict' ? 'all' : 'merge_conflict',
+                  )
+                }
+              }}
+              title={
+                attentionConflictCount > 0
+                  ? '点击立即打开冲突合并工作台'
+                  : '点击按「内容冲突」筛选'
+              }
+            >
+              <div className="organize-kpi-card-head">
+                <span className="organize-kpi-title">内容冲突</span>
+                <div className="organize-kpi-icon-wrap tone-conflict">
+                  <IconAlertTriangle size={16} />
+                </div>
+              </div>
+              <div className="organize-kpi-value-row">
+                <span className="organize-kpi-number">{metrics.mergeConflictCount}</span>
+                <span className="organize-kpi-unit">项</span>
+              </div>
+              <span className="organize-kpi-desc">
+                {attentionConflictCount > 0
+                  ? `⚠️ ${attentionConflictCount} 项待人工决议`
+                  : metrics.mergeConflictCount > 0
+                    ? '✓ 冲突已全部决议'
+                    : '无同名版本冲突'}
+              </span>
+            </div>
+
+            <div
+              className={`organize-kpi-card ${
+                metrics.fixLinkCount === 0 ? 'is-zero' : 'is-highlight tone-fix'
+              } ${selectedTypeFilter === 'fix_link' ? 'is-active' : ''}`}
+              onClick={() =>
+                setSelectedTypeFilter((curr) =>
+                  curr === 'fix_link' ? 'all' : 'fix_link',
+                )
+              }
+              title="点击按「修复断链」筛选"
+            >
+              <div className="organize-kpi-card-head">
+                <span className="organize-kpi-title">修复断链</span>
+                <div className="organize-kpi-icon-wrap tone-fix">
+                  <IconWrench size={16} />
+                </div>
+              </div>
+              <div className="organize-kpi-value-row">
+                <span className="organize-kpi-number">{metrics.fixLinkCount}</span>
+                <span className="organize-kpi-unit">项</span>
+              </div>
+              <span className="organize-kpi-desc">
+                {metrics.fixLinkCount === 0 ? '无失效或损坏链接' : '纠偏修复损坏的链接'}
+              </span>
+            </div>
+
+            <div
+              className={`organize-kpi-card ${
+                metrics.skipCount + metrics.userSkippedCount === 0
+                  ? 'is-zero'
+                  : 'is-highlight tone-skip'
+              } ${selectedTypeFilter === 'skip' ? 'is-active' : ''}`}
+              onClick={() =>
+                setSelectedTypeFilter((curr) => (curr === 'skip' ? 'all' : 'skip'))
+              }
+              title="点击按「保持跳过」筛选"
+            >
+              <div className="organize-kpi-card-head">
+                <span className="organize-kpi-title">保持跳过</span>
+                <div className="organize-kpi-icon-wrap tone-skip">
+                  <IconCheck size={16} />
+                </div>
+              </div>
+              <div className="organize-kpi-value-row">
+                <span className="organize-kpi-number">
+                  {metrics.skipCount + metrics.userSkippedCount}
                 </span>
-              </label>
+                <span className="organize-kpi-unit">项</span>
+              </div>
+              <span className="organize-kpi-desc">
+                {metrics.skipCount + metrics.userSkippedCount === 0
+                  ? '无跳过项目'
+                  : '已规范或手动跳过'}
+              </span>
+            </div>
+          </section>
+
+          {/* 筛选与搜索控制栏 (Filter Deck) */}
+          <section className="organize-filter-deck">
+            <div className="organize-filter-row">
+              <div className="organize-segmented-tabs" role="tablist">
+                <button
+                  type="button"
+                  className={`organize-filter-tab ${
+                    selectedTypeFilter === 'all' ? 'is-active' : ''
+                  }`}
+                  onClick={() => setSelectedTypeFilter('all')}
+                >
+                  <span>全部动作</span>
+                  <span className="organize-tab-count">{metrics.totalActions}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`organize-filter-tab ${
+                    selectedTypeFilter === 'move_to_hub' ? 'is-active' : ''
+                  }`}
+                  onClick={() => setSelectedTypeFilter('move_to_hub')}
+                >
+                  <span>待迁入源仓</span>
+                  <span className="organize-tab-count">{metrics.moveToHubCount}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`organize-filter-tab ${
+                    selectedTypeFilter === 'replace_with_symlink' ? 'is-active' : ''
+                  }`}
+                  onClick={() => setSelectedTypeFilter('replace_with_symlink')}
+                >
+                  <span>待替换软链</span>
+                  <span className="organize-tab-count">
+                    {metrics.replaceWithSymlinkCount}
+                  </span>
+                </button>
+                {metrics.mergeConflictCount > 0 ? (
+                  <button
+                    type="button"
+                    className={`organize-filter-tab ${
+                      selectedTypeFilter === 'merge_conflict' ? 'is-active' : ''
+                    }`}
+                    onClick={() => setSelectedTypeFilter('merge_conflict')}
+                  >
+                    <span>内容冲突</span>
+                    <span
+                      className={`organize-tab-count ${
+                        attentionConflictCount > 0 ? 'is-attention' : ''
+                      }`}
+                    >
+                      {metrics.mergeConflictCount}
+                    </span>
+                  </button>
+                ) : null}
+                {metrics.fixLinkCount > 0 ? (
+                  <button
+                    type="button"
+                    className={`organize-filter-tab ${
+                      selectedTypeFilter === 'fix_link' ? 'is-active' : ''
+                    }`}
+                    onClick={() => setSelectedTypeFilter('fix_link')}
+                  >
+                    <span>修复断链</span>
+                    <span className="organize-tab-count">{metrics.fixLinkCount}</span>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={`organize-filter-tab ${
+                    selectedTypeFilter === 'skip' ? 'is-active' : ''
+                  }`}
+                  onClick={() => setSelectedTypeFilter('skip')}
+                >
+                  <span>保持跳过</span>
+                  <span className="organize-tab-count">
+                    {metrics.skipCount + metrics.userSkippedCount}
+                  </span>
+                </button>
+              </div>
+
+              <div className="organize-search-box">
+                <IconSearch size={15} />
+                <input
+                  type="search"
+                  className="organize-search-input"
+                  placeholder="搜索技能 ID、来源路径…"
+                  value={actionQuery}
+                  onChange={(e) => setActionQuery(e.target.value)}
+                  aria-label="搜索执行计划"
+                />
+                {actionQuery ? (
+                  <button
+                    type="button"
+                    className="organize-search-clear"
+                    onClick={() => setActionQuery('')}
+                    title="清空搜索"
+                  >
+                    <IconX size={14} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {selectionAll.toggleableCount > 0 ? (
+              <div className="organize-filter-row" style={{paddingTop: 4}}>
+                <div className="organize-batch-controls">
+                  <label className="organize-select-all">
+                    <input
+                      type="checkbox"
+                      className="organize-checkbox"
+                      checked={selectionAll.checked}
+                      disabled={executing || visibleSelectableIndices.length === 0}
+                      ref={(el) => {
+                        if (el) el.indeterminate = selectionAll.indeterminate
+                      }}
+                      onChange={(e) =>
+                        void handleToggleIndices(
+                          visibleSelectableIndices,
+                          e.target.checked,
+                        )
+                      }
+                      aria-label="全选当前筛选结果"
+                    />
+                    <span>全选当前筛选</span>
+                    <span className="muted">
+                      （已勾选 {selectionAll.selectedCount} / 可选{' '}
+                      {selectionAll.toggleableCount}）
+                    </span>
+                  </label>
+                </div>
+
+                <div className="organize-batch-controls">
+                  <button
+                    type="button"
+                    className="organize-batch-btn"
+                    disabled={executing || visibleSelectableIndices.length === 0}
+                    onClick={() => void handleToggleIndices(visibleSelectableIndices, true)}
+                  >
+                    全部选中
+                  </button>
+                  <button
+                    type="button"
+                    className="organize-batch-btn"
+                    disabled={executing || visibleSelectableIndices.length === 0}
+                    onClick={() => void handleToggleIndices(visibleSelectableIndices, false)}
+                  >
+                    全部取消
+                  </button>
+                </div>
+              </div>
             ) : null}
-          </div>
-          <div className="organize-plan-search">
-            <input
-              type="search"
-              placeholder="搜索技能 ID 或来源路径…"
-              value={actionQuery}
-              onChange={(e) => setActionQuery(e.target.value)}
-              aria-label="搜索执行计划"
-            />
-          </div>
-          {report ? (
-            <p className="muted">
-              这是执行完成后的最新预览，不是刚才那次执行的明细。已整理好的技能会显示为「跳过」。成功/失败详见
-              <button type="button" className="link-btn" onClick={() => setReportOpen(true)}>
-                执行报告
-              </button>
-              。
-            </p>
+          </section>
+
+          {/* 当所有技能已处于规范状态时展示健康状态卡片 */}
+          {metrics.toggleableCount === 0 && metrics.totalActions > 0 && !actionQuery && selectedTypeFilter === 'all' ? (
+            <div className="organize-healthy-banner">
+              <div className="organize-healthy-icon">
+                <IconShieldCheck size={20} />
+              </div>
+              <div className="organize-healthy-content">
+                <span className="organize-healthy-title">
+                  所有技能均已处于标准规范状态
+                </span>
+                <span className="organize-healthy-subtitle">
+                  共检测到 {metrics.totalActions} 项技能，已全部建立有效符号链接或规范存储于中心源仓，无需执行任何迁移或变更。
+                </span>
+              </div>
+            </div>
           ) : null}
-          {actions.length === 0 ? (
-            <p className="muted">暂无动作</p>
-          ) : filteredActionSections.length === 0 ? (
-            <p className="muted">无匹配结果</p>
-          ) : (
-            <div className="organize-action-groups skill-groups">
-              {filteredActionSections.map((sec) => {
+
+          {/* 动作清单面板 (Actions Deck) */}
+          <section className="organize-actions-deck">
+            {actions.length === 0 ? (
+              <div className="empty-state">暂无动作需要执行。</div>
+            ) : filteredActionSections.length === 0 ? (
+              <div className="empty-state" style={{padding: '32px 16px'}}>
+                <p className="muted" style={{margin: '0 0 12px'}}>
+                  未找到符合「{actionQuery}」的动作项
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => {
+                    setActionQuery('')
+                    setSelectedTypeFilter('all')
+                  }}
+                >
+                  清除筛选与搜索
+                </button>
+              </div>
+            ) : (
+              filteredActionSections.map((sec) => {
                 const collapsed = collapsedActionTypes.has(sec.type)
-                const label = ACTION_LABELS[sec.type] ?? sec.type
+                const config = ACTION_CONFIG[sec.type] ?? {
+                  label: sec.type,
+                  description: '',
+                  icon: IconFolderSync,
+                  toneClass: 'type-skip',
+                }
+                const ActionIcon = config.icon
                 const sectionSelection = organizeSelectionState(
                   sec.items.map(({action}) => action),
                 )
+                const sectionSelectableIndices = sec.items
+                  .filter(({action}) => isOrganizeActionSelectable(action.type))
+                  .map(({index}) => index)
+
                 return (
-                  <section className="skill-group-section" key={sec.type}>
-                    <button
-                      type="button"
-                      className="skill-group-header organize-action-group-header"
-                      aria-expanded={!collapsed}
+                  <div className="organize-group-block" key={sec.type}>
+                    <div
+                      className="organize-group-header-row"
                       onClick={() => toggleActionGroupCollapse(sec.type)}
+                      aria-expanded={!collapsed}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          toggleActionGroupCollapse(sec.type)
+                        }
+                      }}
                     >
-                      <span className="organize-action-group-chevron" aria-hidden="true">
-                        {collapsed ? '▸' : '▾'}
-                      </span>
-                      <span className="organize-action-group-title">
-                        {label}
-                        <span className="muted organize-action-group-count">
-                          （{sec.items.length}）
+                      <div className="organize-group-title-wrap">
+                        <span
+                          className={`organize-group-chevron-icon ${
+                            !collapsed ? 'is-open' : ''
+                          }`}
+                          aria-hidden="true"
+                        >
+                          <IconChevron size={14} />
                         </span>
-                      </span>
-                    </button>
-                    {collapsed ? null : (
-                      <div className="table-wrap">
-                        <table className="data-table">
+                        <div className="organize-group-badge">
+                          <div className={`organize-group-type-icon ${config.toneClass}`}>
+                            <ActionIcon size={14} />
+                          </div>
+                          <span className="organize-group-label">{config.label}</span>
+                          <span className="organize-group-count-pill">
+                            {sec.items.length}
+                          </span>
+                        </div>
+                      </div>
+
+                      {sectionSelection.toggleableCount > 0 ? (
+                        <div
+                          className="organize-group-actions"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <label className="organize-select-all organize-select-all-th">
+                            <input
+                              type="checkbox"
+                              className="organize-checkbox"
+                              checked={sectionSelection.checked}
+                              disabled={executing}
+                              ref={(el) => {
+                                if (el)
+                                  el.indeterminate =
+                                    sectionSelection.indeterminate
+                              }}
+                              onChange={(e) =>
+                                void handleToggleIndices(
+                                  sectionSelectableIndices,
+                                  e.target.checked,
+                                )
+                              }
+                              aria-label={`全选${config.label}`}
+                            />
+                            <span>全选此类</span>
+                          </label>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {!collapsed ? (
+                      <div className="organize-table-wrap">
+                        <table className="organize-table">
                           <thead>
                             <tr>
-                              <th>
-                                {sectionSelection.toggleableCount > 0 ? (
-                                  <label className="organize-select-all organize-select-all-th">
-                                    <input
-                                      type="checkbox"
-                                      checked={sectionSelection.checked}
-                                      disabled={executing}
-                                      ref={(el) => {
-                                        if (el) el.indeterminate = sectionSelection.indeterminate
-                                      }}
-                                      onChange={(e) =>
-                                        void handleToggleIndices(
-                                          sec.items
-                                            .filter(({action}) =>
-                                              isOrganizeActionSelectable(action.type),
-                                            )
-                                            .map(({index}) => index),
-                                          e.target.checked,
-                                        )
-                                      }
-                                      aria-label={
-                                        actionQuery.trim()
-                                          ? `全选当前搜索结果中的${label}`
-                                          : `全选${label}`
-                                      }
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
-                                    选中
-                                  </label>
-                                ) : (
-                                  '选中'
-                                )}
-                              </th>
-                              <th>技能 ID</th>
-                              <th>来源路径</th>
+                              <th style={{width: 48, textAlign: 'center'}}>选中</th>
+                              <th style={{minWidth: 200}}>技能名称 / ID</th>
+                              <th style={{width: 140}}>动作类型</th>
+                              <th>来源路径与对应工具</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -802,41 +1490,148 @@ export default function OrganizePage({onBack}: Props) {
                                   ? conflicts.find((x) => x.skillId === action.skillId)
                                   : undefined
                               const conflictDecided =
-                                Boolean(conflict) && !conflictSkillNeedsAttention(conflict!)
+                                Boolean(conflict) &&
+                                !conflictSkillNeedsAttention(conflict!)
+                              const selectable = isOrganizeActionSelectable(action.type)
+
                               return (
                                 <tr key={`${action.skillId}-${index}`}>
-                                  <td>
+                                  <td style={{textAlign: 'center'}}>
                                     <input
                                       type="checkbox"
+                                      className="organize-checkbox"
                                       checked={Boolean(action.selected)}
-                                      disabled={
-                                        !isOrganizeActionSelectable(action.type) || executing
-                                      }
+                                      disabled={!selectable || executing}
                                       onChange={(e) =>
-                                        void handleToggleSelected(index, e.target.checked)
+                                        void handleToggleSelected(
+                                          index,
+                                          e.target.checked,
+                                        )
                                       }
                                       aria-label={`选中 ${action.skillId}`}
                                     />
                                   </td>
+
                                   <td>
-                                    <span className="mono">{action.skillId}</span>
-                                    {action.type === 'merge_conflict' ? (
-                                      <>
-                                        {conflictDecided ? (
-                                          <span className="muted"> · 已决议</span>
-                                        ) : null}
+                                    <div className="organize-skill-cell">
+                                      <span className="organize-skill-id-chip">
+                                        {action.skillId}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="organize-copy-btn"
+                                        title="复制技能 ID"
+                                        onClick={() =>
+                                          copyText(action.skillId, `skill-${index}`)
+                                        }
+                                      >
+                                        {copiedId === `skill-${index}` ? (
+                                          <IconCheck size={13} style={{color: '#15803d'}} />
+                                        ) : (
+                                          <IconCopy size={13} />
+                                        )}
+                                      </button>
+                                      {action.type === 'merge_conflict' ? (
+                                        conflictDecided ? (
+                                          <span className="organize-conflict-status-pill is-done">
+                                            <IconCheck size={11} />
+                                            已决议
+                                          </span>
+                                        ) : (
+                                          <span className="organize-conflict-status-pill is-diff">
+                                            <IconAlertTriangle size={11} />
+                                            待决议
+                                          </span>
+                                        )
+                                      ) : null}
+                                      {action.type === 'merge_conflict' ? (
                                         <button
                                           type="button"
                                           className="link-btn"
-                                          onClick={() => openConflictDialog(action.skillId)}
+                                          onClick={() =>
+                                            openConflictDialog(action.skillId)
+                                          }
+                                          style={{fontSize: 12}}
                                         >
-                                          {conflictDecided ? '查看' : '处理'}
+                                          {conflictDecided ? '查看对比' : '处理冲突'}
                                         </button>
-                                      </>
-                                    ) : null}
+                                      ) : null}
+                                    </div>
                                   </td>
-                                  <td className="mono muted">
-                                    {(action.sources ?? []).join('; ') || '—'}
+
+                                  <td>
+                                    <span
+                                      className={`organize-action-pill ${config.toneClass}`}
+                                    >
+                                      <ActionIcon size={13} />
+                                      <span>{config.label}</span>
+                                    </span>
+                                  </td>
+
+                                  <td>
+                                    <div className="organize-sources-cell">
+                                      {(action.sources ?? []).length === 0 ? (
+                                        <span className="muted">—</span>
+                                      ) : (
+                                        (action.sources ?? []).map((src, sIdx) => {
+                                          const detected = detectToolFromPath(src)
+                                          const badge = detected
+                                            ? getToolBadge(detected.id)
+                                            : null
+
+                                          return (
+                                            <div
+                                              className="organize-source-item"
+                                              key={sIdx}
+                                            >
+                                              {badge ? (
+                                                <span
+                                                  className="organize-tool-badge"
+                                                  style={{
+                                                    background: badge.gradient,
+                                                    boxShadow: `0 1px 4px ${badge.shadowColor}`,
+                                                  }}
+                                                  title={`来源工具: ${badge.displayName}`}
+                                                >
+                                                  {badge.displayName}
+                                                </span>
+                                              ) : (
+                                                <span
+                                                  className="organize-tool-badge"
+                                                  style={{background: '#64748b'}}
+                                                  title="外部工作目录来源"
+                                                >
+                                                  外部
+                                                </span>
+                                              )}
+                                              <span
+                                                className="organize-source-path"
+                                                title={src}
+                                              >
+                                                {src}
+                                              </span>
+                                              <button
+                                                type="button"
+                                                className="organize-copy-btn"
+                                                title="复制完整路径"
+                                                onClick={() =>
+                                                  copyText(src, `src-${index}-${sIdx}`)
+                                                }
+                                              >
+                                                {copiedId === `src-${index}-${sIdx}` ? (
+                                                  <IconCheck
+                                                    size={12}
+                                                    style={{color: '#15803d'}}
+                                                  />
+                                                ) : (
+                                                  <IconCopy size={12} />
+                                                )}
+                                              </button>
+                                            </div>
+                                          )
+                                        })
+                                      )}
+                                    </div>
                                   </td>
                                 </tr>
                               )
@@ -844,20 +1639,18 @@ export default function OrganizePage({onBack}: Props) {
                           </tbody>
                         </table>
                       </div>
-                    )}
-                  </section>
+                    ) : null}
+                  </div>
                 )
-              })}
-            </div>
-          )}
-        </section>
+              })
+            )}
+          </section>
+        </>
       )}
 
+      {/* 执行报告弹窗 */}
       {reportOpen && report ? (
-        <div
-          className="dialog-backdrop"
-          role="presentation"
-        >
+        <div className="dialog-backdrop" role="presentation">
           <div
             className="dialog dialog-report"
             role="dialog"
@@ -866,23 +1659,28 @@ export default function OrganizePage({onBack}: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="dialog-conflict-head">
-              <h2 id="report-dialog-title">执行报告</h2>
-              <button type="button" className="btn" onClick={() => setReportOpen(false)}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <IconActivity size={18} style={{color: 'var(--accent)'}} />
+                <h2 id="report-dialog-title">执行整理报告</h2>
+              </div>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setReportOpen(false)}
+              >
                 关闭
               </button>
             </div>
             <div className="report-dialog-body">
-              <ReportPanel report={report} />
+              <ReportPanel report={report} onCopy={copyText} copiedId={copiedId} />
             </div>
           </div>
         </div>
       ) : null}
 
+      {/* 外部工作目录添加建议弹窗 */}
       {workdirDialogOpen && workdirSuggestions.length > 0 ? (
-        <div
-          className="dialog-backdrop"
-          role="presentation"
-        >
+        <div className="dialog-backdrop" role="presentation">
           <div
             className="dialog dialog-workdir-suggest"
             role="dialog"
@@ -891,13 +1689,16 @@ export default function OrganizePage({onBack}: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="dialog-conflict-head">
-              <h2 id="workdir-suggest-title">是否将这些外部目录添加为工作目录？</h2>
+              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <IconFolderPlus size={18} style={{color: 'var(--accent)'}} />
+                <h2 id="workdir-suggest-title">发现外部工作目录，是否加入日常管理？</h2>
+              </div>
               <button type="button" className="btn" onClick={closeWorkdirDialog}>
                 跳过
               </button>
             </div>
             <p className="muted workdir-suggest-desc">
-              添加后将参与扫描；并为本次迁入的 skill 建立指向源仓的符号链接。
+              添加后将参与后续的自动扫描；并为本次已迁入源仓的 Skill 建立指向源仓的符号链接。
             </p>
             {workdirDialogError ? (
               <div className="dialog-error">{workdirDialogError}</div>
@@ -916,6 +1717,7 @@ export default function OrganizePage({onBack}: Props) {
                   <label className="workdir-suggest-item">
                     <input
                       type="checkbox"
+                      className="organize-checkbox"
                       checked={workdirSelected.has(sug.path)}
                       onChange={() => toggleWorkdirSelected(sug.path)}
                     />
@@ -929,7 +1731,7 @@ export default function OrganizePage({onBack}: Props) {
             </ul>
             <div className="dialog-actions">
               <button type="button" className="btn" onClick={closeWorkdirDialog}>
-                跳过
+                暂不添加
               </button>
               <button
                 type="button"
@@ -937,13 +1739,14 @@ export default function OrganizePage({onBack}: Props) {
                 disabled={confirmingWorkdirs || workdirSelected.size === 0}
                 onClick={() => void handleConfirmAddWorkdirs()}
               >
-                {confirmingWorkdirs ? '添加中…' : '添加所选'}
+                {confirmingWorkdirs ? '添加中…' : `添加所选 (${workdirSelected.size})`}
               </button>
             </div>
           </div>
         </div>
       ) : null}
 
+      {/* 恢复误迁链接弹窗 */}
       {restoreDialogOpen && restoreItems.length > 0 ? (
         <div className="dialog-backdrop" role="presentation">
           <div
@@ -954,24 +1757,35 @@ export default function OrganizePage({onBack}: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="dialog-conflict-head">
-              <h2 id="restore-orphan-title">恢复误迁的符号链接？</h2>
+              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <IconRotateCcw size={18} style={{color: 'var(--accent)'}} />
+                <h2 id="restore-orphan-title">恢复误迁的符号链接</h2>
+              </div>
               <button type="button" className="btn" onClick={closeRestoreDialog}>
                 关闭
               </button>
             </div>
             <p className="muted workdir-suggest-desc">
-              这些路径当前是指向源仓的符号链接（多半是深度扫描整理时误建的）。恢复后会删除链接，并把源仓中的真实目录移回原位置。
+              这些路径当前是指向源仓的符号链接（通常是在深度扫描时误建的）。恢复后会删除符号链接，并把源仓中的真实目录安全移回原位置。
             </p>
-            {restoreDialogError ? <div className="dialog-error">{restoreDialogError}</div> : null}
+            {restoreDialogError ? (
+              <div className="dialog-error">{restoreDialogError}</div>
+            ) : null}
             <div className="page-toolbar compact">
               <button
                 type="button"
                 className="btn"
-                onClick={() => setRestoreSelected(new Set(restoreItems.map((i) => i.linkPath)))}
+                onClick={() =>
+                  setRestoreSelected(new Set(restoreItems.map((i) => i.linkPath)))
+                }
               >
                 全选
               </button>
-              <button type="button" className="btn" onClick={() => setRestoreSelected(new Set())}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setRestoreSelected(new Set())}
+              >
                 取消全选
               </button>
             </div>
@@ -981,13 +1795,19 @@ export default function OrganizePage({onBack}: Props) {
                   <label className="workdir-suggest-item">
                     <input
                       type="checkbox"
+                      className="organize-checkbox"
                       checked={restoreSelected.has(item.linkPath)}
                       onChange={() => toggleRestoreSelected(item.linkPath)}
                     />
                     <span className="workdir-suggest-text">
-                      <span className="mono path-line">{item.skillId}</span>
-                      <span className="mono path-line muted">{item.linkPath}</span>
-                      <span className="mono path-line muted">← {item.targetPath}</span>
+                      <span
+                        className="mono path-line"
+                        style={{fontWeight: 700, color: 'var(--text)'}}
+                      >
+                        {item.skillId}
+                      </span>
+                      <span className="mono path-line muted">链接: {item.linkPath}</span>
+                      <span className="mono path-line muted">源仓: {item.targetPath}</span>
                     </span>
                   </label>
                 </li>
@@ -1003,18 +1823,16 @@ export default function OrganizePage({onBack}: Props) {
                 disabled={restoringOrphans || restoreSelected.size === 0}
                 onClick={() => void handleConfirmRestoreOrphans()}
               >
-                {restoringOrphans ? '恢复中…' : '恢复所选'}
+                {restoringOrphans ? '恢复中…' : `确认恢复 (${restoreSelected.size})`}
               </button>
             </div>
           </div>
         </div>
       ) : null}
 
+      {/* 冲突合并全功能工作台弹窗 */}
       {conflictOpen && conflicts.length > 0 ? (
-        <div
-          className="dialog-backdrop"
-          role="presentation"
-        >
+        <div className="dialog-backdrop" role="presentation">
           <div
             className="dialog dialog-conflict"
             role="dialog"
@@ -1023,7 +1841,10 @@ export default function OrganizePage({onBack}: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="dialog-conflict-head">
-              <h2 id="conflict-dialog-title">冲突合并</h2>
+              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <IconAlertTriangle size={18} style={{color: '#d97706'}} />
+                <h2 id="conflict-dialog-title">冲突合并工作台</h2>
+              </div>
               <button type="button" className="btn" onClick={closeConflictDialog}>
                 关闭
               </button>
@@ -1031,27 +1852,38 @@ export default function OrganizePage({onBack}: Props) {
 
             {dialogError ? <div className="dialog-error">{dialogError}</div> : null}
 
-            <div className="conflict-tabs">
+            {/* 冲突技能切换选项卡 */}
+            <div className="conflict-tabs-scroll conflict-tabs">
               {conflicts.map((c) => {
                 const {resolved, total} = conflictFileProgress(c)
-                const label =
-                  total > 0 ? `${c.skillId}（冲突 ${resolved}/${total}）` : c.skillId
+                const isDecided = resolved >= total && total > 0
                 return (
                   <button
                     key={c.skillId}
                     type="button"
-                    className={
-                      activeConflict?.skillId === c.skillId
-                        ? 'btn conflict-tab active'
-                        : 'btn conflict-tab'
-                    }
+                    className={`conflict-tab-item conflict-tab ${
+                      activeConflict?.skillId === c.skillId ? 'is-active active' : ''
+                    }`}
                     onClick={() => {
                       setActiveConflictId(c.skillId)
                       setDialogError('')
                     }}
                   >
-                    {label}
-                    {c.userSkipped ? ' · 已跳过' : ''}
+                    <span>{c.skillId}</span>
+                    {total > 0 ? (
+                      <span
+                        className={`organize-tab-count ${
+                          isDecided ? '' : 'is-attention'
+                        }`}
+                      >
+                        {resolved}/{total}
+                      </span>
+                    ) : null}
+                    {c.userSkipped ? (
+                      <span className="muted">· 已跳过</span>
+                    ) : isDecided ? (
+                      <span style={{color: '#15803d'}}>✓</span>
+                    ) : null}
                   </button>
                 )
               })}
@@ -1073,8 +1905,12 @@ export default function OrganizePage({onBack}: Props) {
             ) : null}
 
             <div className="dialog-actions">
-              <button type="button" className="btn btn-primary" onClick={closeConflictDialog}>
-                关闭
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={closeConflictDialog}
+              >
+                完成并返回列表
               </button>
             </div>
           </div>
@@ -1103,11 +1939,12 @@ function ConflictPanel({
 }) {
   const files = conflict.files ?? []
   const firstDiff =
-    files.find((f) => f.status === 'both_diff')?.relativePath ?? files[0]?.relativePath ?? ''
+    files.find((f) => f.status === 'both_diff')?.relativePath ??
+    files[0]?.relativePath ??
+    ''
   const [selectedRel, setSelectedRel] = useState(firstDiff)
   const [textA, setTextA] = useState('')
   const [textB, setTextB] = useState('')
-  // 初始 true，避免首帧用空 textA/textB 挂载 ThreeWayMerge 并误自动决议
   const [loadingTexts, setLoadingTexts] = useState(true)
   const [textError, setTextError] = useState('')
 
@@ -1153,7 +1990,6 @@ function ConflictPanel({
     return () => {
       cancelled = true
     }
-    // sideA/sideB/index：应用本轮后路径会变，必须重读；不能只靠 skillId+相对路径
   }, [
     conflict.skillId,
     conflict.sideA,
@@ -1169,45 +2005,60 @@ function ConflictPanel({
 
   return (
     <div className="conflict-panel">
-      <div className="conflict-meta">
-        <div>
-          <div className="muted">侧 A</div>
-          <div className="mono path-line">{conflict.sideA}</div>
+      {/* 来源对比元数据卡片 */}
+      <div className="conflict-side-cards">
+        <div className="conflict-side-card">
+          <span className="conflict-side-title">侧 A（源仓目标）</span>
+          <span className="mono path-line" title={conflict.sideA}>
+            {conflict.sideA}
+          </span>
         </div>
-        <div>
-          <div className="muted">侧 B</div>
-          <div className="mono path-line">{conflict.sideB}</div>
+        <div className="conflict-side-card">
+          <span className="conflict-side-title">侧 B（待迁入来源）</span>
+          <span className="mono path-line" title={conflict.sideB}>
+            {conflict.sideB}
+          </span>
         </div>
-        {conflict.total > 1 ? (
-          <div className="badge">
-            合并轮次 {conflict.index || 1}/{conflict.total}
-          </div>
-        ) : null}
-        {conflict.userSkipped ? <div className="badge status-conflict">已跳过</div> : null}
       </div>
 
-      <div className="page-toolbar compact">
-        <button type="button" className="btn" onClick={onSkip}>
-          跳过该 skill
-        </button>
-        <button type="button" className="btn" onClick={onReset}>
-          撤销选择
-        </button>
-        {canApplyRound ? (
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={applyingRound}
-            onClick={onApplyRound}
-          >
-            {applyingRound ? '应用中…' : '应用本轮合并'}
+      <div
+        className="page-toolbar compact"
+        style={{justifyContent: 'space-between', marginBottom: 10}}
+      >
+        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+          {conflict.total > 1 ? (
+            <span className="organize-action-pill type-replace_with_symlink">
+              合并轮次 {conflict.index || 1} / {conflict.total}
+            </span>
+          ) : null}
+          {conflict.userSkipped ? (
+            <span className="organize-action-pill type-skip">已手动跳过</span>
+          ) : null}
+        </div>
+
+        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+          <button type="button" className="btn btn-sm" onClick={onSkip}>
+            跳过该技能
           </button>
-        ) : null}
+          <button type="button" className="btn btn-sm" onClick={onReset}>
+            重置当前决议
+          </button>
+          {canApplyRound ? (
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              disabled={applyingRound}
+              onClick={onApplyRound}
+            >
+              {applyingRound ? '应用中…' : '应用本轮合并（进入下一轮）'}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="conflict-layout">
         <div className="conflict-file-list">
-          <div className="muted conflict-list-title">文件列表</div>
+          <div className="muted conflict-list-title">文件清单 ({files.length})</div>
           <ul>
             {files.map((file) => {
               const active = file.relativePath === selected?.relativePath
@@ -1224,7 +2075,13 @@ function ConflictPanel({
                       <span className="conflict-file-mark" aria-hidden="true" />
                       <span className="mono">{file.relativePath}</span>
                     </span>
-                    <span className={isDiff ? 'conflict-file-status' : 'conflict-file-status is-quiet'}>
+                    <span
+                      className={
+                        isDiff
+                          ? 'conflict-file-status'
+                          : 'conflict-file-status is-quiet'
+                      }
+                    >
                       {FILE_STATUS_LABELS[file.status] ?? file.status}
                       {conflictFileChoiceSuffix(file)}
                     </span>
@@ -1241,17 +2098,23 @@ function ConflictPanel({
           ) : (
             <>
               <div className="conflict-detail-head">
-                <div className="mono">{selected.relativePath}</div>
-                <div className="muted">
+                <span className="mono" style={{fontWeight: 700}}>
+                  {selected.relativePath}
+                </span>
+                <span className="muted" style={{fontSize: 12}}>
                   {FILE_STATUS_LABELS[selected.status] ?? selected.status}
-                  {selected.isText ? '' : ' · 非文本'}
-                </div>
+                  {selected.isText ? '' : ' · 二进制文件'}
+                </span>
               </div>
 
               {needsChoice && selected.isText ? (
                 <>
                   {textError ? <div className="dialog-error">{textError}</div> : null}
-                  {loadingTexts ? <p className="muted">加载对比内容…</p> : null}
+                  {loadingTexts ? (
+                    <div style={{padding: 24, textAlign: 'center'}} className="muted">
+                      正在读取文件文本对比…
+                    </div>
+                  ) : null}
                   {!loadingTexts && !textError ? (
                     <ThreeWayMerge
                       key={`${conflict.skillId}:${conflict.index}:${conflict.sideA}:${conflict.sideB}:${selected.relativePath}`}
@@ -1263,19 +2126,17 @@ function ConflictPanel({
                           : choice === 'keep_b'
                             ? textB
                             : choice === 'manual'
-                              ? (selected.mergedContent ?? '')
+                              ? selected.mergedContent ?? ''
                               : ''
                       }
                       disabled={conflict.userSkipped}
                       onChange={(merged, {fullyResolved}) => {
-                        // 未解决完全部冲突块：清除文件决议与草稿，避免切回时用残缺文本错误还原
                         if (!fullyResolved) {
                           if (choice || selected.mergedContent) {
                             onChoice(selected.relativePath, '', '')
                           }
                           return
                         }
-                        // 文本尚未加载完成时的空对比，禁止写成 keep_a
                         if (textA === '' && textB === '') return
                         const norm = normalizeText(merged)
                         if (norm === normalizeText(textA)) {
@@ -1292,8 +2153,8 @@ function ConflictPanel({
               ) : null}
 
               {needsChoice && !selected.isText ? (
-                <div className="choice-bar">
-                  <span className="muted">二进制文件：</span>
+                <div className="choice-bar" style={{padding: 16}}>
+                  <span className="muted">二进制文件不支持行级合并，请选择保留版本：</span>
                   <label>
                     <input
                       type="radio"
@@ -1302,7 +2163,7 @@ function ConflictPanel({
                       disabled={conflict.userSkipped}
                       onChange={() => onChoice(selected.relativePath, 'keep_a', '')}
                     />
-                    保留 A
+                    <span>保留侧 A（源仓版）</span>
                   </label>
                   <label>
                     <input
@@ -1312,19 +2173,19 @@ function ConflictPanel({
                       disabled={conflict.userSkipped}
                       onChange={() => onChoice(selected.relativePath, 'keep_b', '')}
                     />
-                    保留 B
+                    <span>保留侧 B（待迁入版）</span>
                   </label>
                 </div>
               ) : null}
 
               {!needsChoice ? (
-                <p className="muted">
+                <div style={{padding: '24px 16px'}} className="muted">
                   {selected.status === 'only_a'
-                    ? '默认保留 A，无需选择'
+                    ? '该文件仅存在于源仓侧，将默认保留，无需选择。'
                     : selected.status === 'only_b'
-                      ? '默认保留 B，无需选择'
-                      : '两侧相同，无需选择'}
-                </p>
+                      ? '该文件仅存在于待迁入侧，将默认保留并归入源仓，无需选择。'
+                      : '两侧文件内容完全相同，无需手动合并。'}
+                </div>
               ) : null}
             </>
           )}
@@ -1334,34 +2195,136 @@ function ConflictPanel({
   )
 }
 
-function ReportPanel({report}: {report: OrganizeReport}) {
+function ReportPanel({
+  report,
+  onCopy,
+  copiedId,
+}: {
+  report: OrganizeReport
+  onCopy: (text: string, id: string) => void
+  copiedId: string | null
+}) {
+  const [filterTone, setFilterTone] = useState<'all' | 'ok' | 'muted' | 'danger'>('all')
+  const [search, setSearch] = useState('')
+
   const ok = report.succeeded?.length ?? 0
   const skip = report.skipped?.length ?? 0
   const fail = report.failed?.length ?? 0
+
+  const filterItems = (items: {skillId: string; message: string}[]) => {
+    const q = search.trim().toLowerCase()
+    if (!q) return items
+    return items.filter(
+      (item) =>
+        item.skillId.toLowerCase().includes(q) ||
+        (item.message && item.message.toLowerCase().includes(q)),
+    )
+  }
+
   return (
     <div className="report-panel">
       <div className="report-stats">
-        <div className="report-stat-card stat-ok">
-          <span className="stat-label">成功</span>
+        <div
+          className={`report-stat-card stat-ok ${filterTone === 'ok' ? 'is-active' : ''}`}
+          onClick={() => setFilterTone((curr) => (curr === 'ok' ? 'all' : 'ok'))}
+          style={{cursor: 'pointer'}}
+        >
+          <span className="stat-label">成功完成</span>
           <span className="stat-value">{ok}</span>
         </div>
-        <div className="report-stat-card stat-muted">
+        <div
+          className={`report-stat-card stat-muted ${
+            filterTone === 'muted' ? 'is-active' : ''
+          }`}
+          onClick={() => setFilterTone((curr) => (curr === 'muted' ? 'all' : 'muted'))}
+          style={{cursor: 'pointer'}}
+        >
           <span className="stat-label">跳过</span>
           <span className="stat-value">{skip}</span>
         </div>
-        <div className="report-stat-card stat-danger">
+        <div
+          className={`report-stat-card stat-danger ${
+            filterTone === 'danger' ? 'is-active' : ''
+          }`}
+          onClick={() => setFilterTone((curr) => (curr === 'danger' ? 'all' : 'danger'))}
+          style={{cursor: 'pointer'}}
+        >
           <span className="stat-label">失败</span>
           <span className="stat-value">{fail}</span>
         </div>
       </div>
-      <ReportList title="成功" items={report.succeeded ?? []} tone="ok" />
-      <ReportList
-        title="跳过"
-        items={report.skipped ?? []}
-        tone="muted"
-        defaultCollapsed
-      />
-      <ReportList title="失败" items={report.failed ?? []} tone="danger" />
+
+      <div className="report-filter-bar">
+        <div className="organize-segmented-tabs">
+          <button
+            type="button"
+            className={`organize-filter-tab ${filterTone === 'all' ? 'is-active' : ''}`}
+            onClick={() => setFilterTone('all')}
+          >
+            全部 ({ok + skip + fail})
+          </button>
+          <button
+            type="button"
+            className={`organize-filter-tab ${filterTone === 'ok' ? 'is-active' : ''}`}
+            onClick={() => setFilterTone('ok')}
+          >
+            成功 ({ok})
+          </button>
+          <button
+            type="button"
+            className={`organize-filter-tab ${filterTone === 'muted' ? 'is-active' : ''}`}
+            onClick={() => setFilterTone('muted')}
+          >
+            跳过 ({skip})
+          </button>
+          <button
+            type="button"
+            className={`organize-filter-tab ${filterTone === 'danger' ? 'is-active' : ''}`}
+            onClick={() => setFilterTone('danger')}
+          >
+            失败 ({fail})
+          </button>
+        </div>
+
+        <input
+          type="search"
+          className="report-search-input"
+          placeholder="搜索报告技能 ID…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
+      {(filterTone === 'all' || filterTone === 'ok') && ok > 0 ? (
+        <ReportList
+          title="成功完成"
+          items={filterItems(report.succeeded ?? [])}
+          tone="ok"
+          onCopy={onCopy}
+          copiedId={copiedId}
+        />
+      ) : null}
+
+      {(filterTone === 'all' || filterTone === 'muted') && skip > 0 ? (
+        <ReportList
+          title="已跳过"
+          items={filterItems(report.skipped ?? [])}
+          tone="muted"
+          defaultCollapsed={filterTone === 'all'}
+          onCopy={onCopy}
+          copiedId={copiedId}
+        />
+      ) : null}
+
+      {(filterTone === 'all' || filterTone === 'danger') && fail > 0 ? (
+        <ReportList
+          title="执行失败"
+          items={filterItems(report.failed ?? [])}
+          tone="danger"
+          onCopy={onCopy}
+          copiedId={copiedId}
+        />
+      ) : null}
     </div>
   )
 }
@@ -1371,12 +2334,15 @@ function ReportList({
   items,
   tone,
   defaultCollapsed,
+  onCopy,
+  copiedId,
 }: {
   title: string
   items: {skillId: string; message: string}[]
   tone: 'ok' | 'muted' | 'danger'
-  /** 未传时：有条目则展开，数量为 0 则折叠 */
   defaultCollapsed?: boolean
+  onCopy: (text: string, id: string) => void
+  copiedId: string | null
 }) {
   const [collapsed, setCollapsed] = useState(
     () => defaultCollapsed ?? items.length === 0,
@@ -1393,16 +2359,34 @@ function ReportList({
           {collapsed ? '▸' : '▾'}
         </span>
         <span className="report-block-dot" />
-        {title}（{items.length}）
+        <span>
+          {title}（{items.length}）
+        </span>
       </button>
       {collapsed ? null : items.length === 0 ? (
-        <p className="muted report-empty">无</p>
+        <p className="muted report-empty">无匹配项</p>
       ) : (
         <ul className="report-list">
           {items.map((item, i) => (
             <li key={`${item.skillId}-${i}`} className="report-item">
-              <span className="mono report-skill-id">{item.skillId}</span>
-              {item.message ? <span className="report-item-msg">{item.message}</span> : null}
+              <div style={{display: 'flex', alignItems: 'center', gap: 6}}>
+                <span className="mono report-skill-id">{item.skillId}</span>
+                <button
+                  type="button"
+                  className="organize-copy-btn"
+                  title="复制技能 ID"
+                  onClick={() => onCopy(item.skillId, `rep-${tone}-${i}`)}
+                >
+                  {copiedId === `rep-${tone}-${i}` ? (
+                    <IconCheck size={12} style={{color: '#15803d'}} />
+                  ) : (
+                    <IconCopy size={12} />
+                  )}
+                </button>
+              </div>
+              {item.message ? (
+                <span className="report-item-msg">{item.message}</span>
+              ) : null}
             </li>
           ))}
         </ul>

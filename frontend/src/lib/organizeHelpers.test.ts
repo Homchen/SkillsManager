@@ -1,9 +1,11 @@
 import {describe, expect, it} from 'vitest'
 import {
+  calculateOrganizeMetrics,
   conflictFileProgress,
   conflictFilesReady,
   conflictRoundNeedsApply,
   conflictSkillNeedsAttention,
+  detectToolFromPath,
   errMsg,
   filterActionSectionsByQuery,
   groupActionsByType,
@@ -346,3 +348,46 @@ describe('filterActionSectionsByQuery', () => {
     expect(filtered[0].items).toEqual([{action: {type: 'move_to_hub', skillId: 'b', sources: ['/tmp/b']}, index: 1}])
   })
 })
+
+describe('detectToolFromPath', () => {
+  it('identifies tools from path patterns', () => {
+    expect(detectToolFromPath('C:\\Users\\admin\\.cursor\\skills\\foo')?.id).toBe('cursor')
+    expect(detectToolFromPath('/home/user/.claude/skills/bar')?.id).toBe('claude')
+    expect(detectToolFromPath('D:/repo/.vscode/skills/baz')?.id).toBe('vscode')
+    expect(detectToolFromPath('/app/code/user/skills/qux')?.id).toBe('vscode')
+    expect(detectToolFromPath('/home/.windsurf/skills/test')?.id).toBe('windsurf')
+    expect(detectToolFromPath('C:\\.trae\\skills\\my')?.id).toBe('trae')
+    expect(detectToolFromPath('/unknown/path/custom/skill')).toBeNull()
+    expect(detectToolFromPath('')).toBeNull()
+  })
+})
+
+describe('calculateOrganizeMetrics', () => {
+  it('correctly aggregates counts and selections', () => {
+    const actions = [
+      {type: 'move_to_hub', selected: true},
+      {type: 'move_to_hub', selected: false},
+      {type: 'replace_with_symlink', selected: true},
+      {type: 'merge_conflict', selected: true},
+      {type: 'fix_link', selected: false},
+      {type: 'skip', selected: false},
+      {type: 'skipped_by_user', selected: false},
+    ]
+    const conflicts = [
+      {files: [{status: 'both_diff'}]},
+      {files: [{status: 'both_diff', choice: 'keep_a'}]},
+    ]
+    const metrics = calculateOrganizeMetrics(actions, conflicts)
+    expect(metrics.totalActions).toBe(7)
+    expect(metrics.moveToHubCount).toBe(2)
+    expect(metrics.replaceWithSymlinkCount).toBe(1)
+    expect(metrics.mergeConflictCount).toBe(1)
+    expect(metrics.fixLinkCount).toBe(1)
+    expect(metrics.skipCount).toBe(1)
+    expect(metrics.userSkippedCount).toBe(1)
+    expect(metrics.unresolvedConflictCount).toBe(1)
+    expect(metrics.toggleableCount).toBe(5) // move_to_hub(2) + replace(1) + conflict(1) + fix(1)
+    expect(metrics.selectedCount).toBe(3) // 1 move + 1 replace + 1 conflict
+  })
+})
+

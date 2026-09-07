@@ -177,3 +177,85 @@ export function filterActionSectionsByQuery<T extends OrganizeActionSearchable &
   }
   return out
 }
+
+export type DetectedTool = {
+  id: string
+  name: string
+}
+
+/** 从来源路径中检测所属 AI 工具 */
+export function detectToolFromPath(sourcePath: string): DetectedTool | null {
+  if (!sourcePath) return null
+  const norm = sourcePath.toLowerCase().replace(/\\/g, '/')
+  if (norm.includes('.cursor/') || norm.includes('/cursor/')) return {id: 'cursor', name: 'Cursor'}
+  if (norm.includes('.claude/') || norm.includes('/claude/')) return {id: 'claude', name: 'Claude'}
+  if (norm.includes('.windsurf/') || norm.includes('/windsurf/')) return {id: 'windsurf', name: 'Windsurf'}
+  if (norm.includes('.trae/') || norm.includes('/trae/')) return {id: 'trae', name: 'Trae'}
+  if (norm.includes('.vscode/') || norm.includes('/vscode/') || norm.includes('code/user/skills')) return {id: 'vscode', name: 'VS Code'}
+  if (norm.includes('.cline/') || norm.includes('/cline/')) return {id: 'cline', name: 'Cline'}
+  if (norm.includes('.roo/') || norm.includes('/roo/')) return {id: 'roo', name: 'Roo'}
+  if (norm.includes('.agents/') || norm.includes('/agents/')) return {id: 'agents', name: 'Agents'}
+  if (norm.includes('.aider/') || norm.includes('/aider/')) return {id: 'aider', name: 'Aider'}
+  if (norm.includes('.copilot/') || norm.includes('/copilot/')) return {id: 'copilot', name: 'Copilot'}
+  if (norm.includes('opencode')) return {id: 'opencode', name: 'OpenCode'}
+  if (norm.includes('codex')) return {id: 'codex', name: 'Codex'}
+  return null
+}
+
+export type OrganizeMetrics = {
+  totalActions: number
+  moveToHubCount: number
+  replaceWithSymlinkCount: number
+  mergeConflictCount: number
+  fixLinkCount: number
+  skipCount: number
+  userSkippedCount: number
+  unresolvedConflictCount: number
+  selectedCount: number
+  toggleableCount: number
+}
+
+/** 汇总动作指标（供顶部 KPI 卡片与筛选） */
+export function calculateOrganizeMetrics(
+  actions: ReadonlyArray<{type: string; selected?: boolean}>,
+  conflicts: ReadonlyArray<ConflictSkillLike>,
+): OrganizeMetrics {
+  let moveToHubCount = 0
+  let replaceWithSymlinkCount = 0
+  let mergeConflictCount = 0
+  let fixLinkCount = 0
+  let skipCount = 0
+  let userSkippedCount = 0
+  let selectedCount = 0
+  let toggleableCount = 0
+
+  for (const a of actions) {
+    if (a.type === 'move_to_hub') moveToHubCount++
+    else if (a.type === 'replace_with_symlink') replaceWithSymlinkCount++
+    else if (a.type === 'merge_conflict') mergeConflictCount++
+    else if (a.type === 'fix_link') fixLinkCount++
+    else if (a.type === 'skip') skipCount++
+    else if (a.type === 'skipped_by_user') userSkippedCount++
+
+    if (isOrganizeActionSelectable(a.type)) {
+      toggleableCount++
+      if (a.selected) selectedCount++
+    }
+  }
+
+  const unresolvedConflictCount = conflicts.filter(conflictSkillNeedsAttention).length
+
+  return {
+    totalActions: actions.length,
+    moveToHubCount,
+    replaceWithSymlinkCount,
+    mergeConflictCount,
+    fixLinkCount,
+    skipCount,
+    userSkippedCount,
+    unresolvedConflictCount,
+    selectedCount,
+    toggleableCount,
+  }
+}
+
