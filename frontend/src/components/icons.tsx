@@ -464,6 +464,30 @@ export function IconActivity(props: IconProps) {
   )
 }
 
+/** 奖杯 / 冠军 */
+export function IconTrophy(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1c0 .55.45 1 1 1h8c.55 0 1-.45 1-1v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34" />
+      <path d="M6 4h12a2 2 0 0 1 2 2v3a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6V6a2 2 0 0 1 2-2Z" />
+    </Icon>
+  )
+}
+
+/** 向上增长趋势 */
+export function IconTrendingUp(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </Icon>
+  )
+}
+
+
 
 
 

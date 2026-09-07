@@ -130,3 +130,88 @@ export function formatUsageLabel(count: number, lastUsedAt?: string): string {
   if (n <= 0) return '从未使用'
   return `使用 ${n} 次 · ${formatLastUsed(lastUsedAt)}`
 }
+
+export interface UsageMetrics {
+  totalInRange: number
+  totalAllTime: number
+  activeSkillsCount: number
+  totalSkillsCount: number
+  topSkill: {item: SkillUsageItem; score: number} | null
+  peakDay: {date: string; count: number} | null
+  dailyAverage: number
+  daysCount: number
+}
+
+export function calculateUsageMetrics(
+  skills: SkillUsageItem[],
+  range: UsageRange,
+  today = new Date(),
+): UsageMetrics {
+  const totalSkillsCount = skills.length
+  let totalAllTime = 0
+  let totalInRange = 0
+  let activeSkillsCount = 0
+
+  const ranked = rankSkills(skills, 'range', range, today)
+  for (const s of skills) {
+    totalAllTime += s.count ?? 0
+  }
+
+  for (const r of ranked) {
+    if (r.score > 0) {
+      activeSkillsCount++
+      totalInRange += r.score
+    }
+  }
+
+  const series = aggregateDaily(skills, range, today)
+  let peakDay: {date: string; count: number} | null = null
+  for (const p of series) {
+    if (p.count > 0 && (!peakDay || p.count > peakDay.count)) {
+      peakDay = p
+    }
+  }
+
+  const daysCount = series.length || 1
+  const dailyAverage = totalInRange > 0 ? Number((totalInRange / daysCount).toFixed(1)) : 0
+  const topSkill = ranked.length > 0 && ranked[0].score > 0 ? ranked[0] : null
+
+  return {
+    totalInRange,
+    totalAllTime,
+    activeSkillsCount,
+    totalSkillsCount,
+    topSkill,
+    peakDay,
+    dailyAverage,
+    daysCount,
+  }
+}
+
+/** 生成 Catmull-Rom 三阶平滑贝塞尔曲线路径 */
+export function buildSmoothPath(coords: {x: number; y: number}[]): string {
+  if (coords.length === 0) return ''
+  if (coords.length === 1) return `M${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`
+  if (coords.length === 2) {
+    return `M${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)} L${coords[1].x.toFixed(1)} ${coords[1].y.toFixed(1)}`
+  }
+
+  let d = `M${coords[0].x.toFixed(1)} ${coords[0].y.toFixed(1)}`
+
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[Math.max(0, i - 1)]
+    const p1 = coords[i]
+    const p2 = coords[i + 1]
+    const p3 = coords[Math.min(coords.length - 1, i + 2)]
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = p2.y - (p3.y - p1.y) / 6
+
+    d += ` C${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+  }
+
+  return d
+}
+

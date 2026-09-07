@@ -1,6 +1,8 @@
 import {describe, expect, it} from 'vitest'
 import {
   aggregateDaily,
+  buildSmoothPath,
+  calculateUsageMetrics,
   countInRange,
   formatUsageLabel,
   localDateKey,
@@ -67,5 +69,50 @@ describe('skillUsage helpers', () => {
   it('formats unused skills', () => {
     expect(formatUsageLabel(0)).toBe('从未使用')
     expect(localDateKey(today)).toBe('2026-07-28')
+  })
+
+  it('calculates usage metrics correctly', () => {
+    const skills = [
+      item({
+        id: 'skill-1',
+        name: 'Skill One',
+        count: 50,
+        daily: {'2026-07-26': 10, '2026-07-27': 20, '2026-07-28': 5},
+      }),
+      item({
+        id: 'skill-2',
+        name: 'Skill Two',
+        count: 15,
+        daily: {'2026-07-27': 5},
+      }),
+      item({
+        id: 'skill-3',
+        name: 'Skill Three',
+        count: 0,
+        daily: {},
+      }),
+    ]
+
+    const metrics = calculateUsageMetrics(skills, 7, today)
+    expect(metrics.totalInRange).toBe(40) // 10 + 20 + 5 + 5
+    expect(metrics.totalAllTime).toBe(65) // 50 + 15 + 0
+    expect(metrics.activeSkillsCount).toBe(2)
+    expect(metrics.totalSkillsCount).toBe(3)
+    expect(metrics.topSkill?.item.id).toBe('skill-1')
+    expect(metrics.topSkill?.score).toBe(35)
+    expect(metrics.peakDay?.date).toBe('2026-07-27')
+    expect(metrics.peakDay?.count).toBe(25) // 20 + 5
+    expect(metrics.dailyAverage).toBe(5.7) // 40 / 7 = 5.714...
+  })
+
+  it('builds smooth bezier path', () => {
+    const coords = [
+      {x: 10, y: 100},
+      {x: 50, y: 50},
+      {x: 100, y: 80},
+    ]
+    const path = buildSmoothPath(coords)
+    expect(path.startsWith('M10.0 100.0')).toBe(true)
+    expect(path.includes('C')).toBe(true)
   })
 })
