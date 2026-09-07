@@ -29,6 +29,7 @@ import {
 import {ClipboardSetText, OnFileDrop, OnFileDropOff} from '../../wailsjs/runtime/runtime'
 import {AppToast, useAppToast} from '../components/AppToast'
 import {
+  IconAlertTriangle,
   IconBulkToolLinks,
   IconCheck,
   IconChevron,
@@ -37,10 +38,14 @@ import {
   IconFolderSync,
   IconLayoutGrid,
   IconLayoutList,
+  IconMoreVertical,
   IconPencil,
   IconPlus,
   IconRefresh,
+  IconSearch,
+  IconSparkles,
   IconTrash,
+  IconX,
 } from '../components/icons'
 import {
   DEFAULT_GROUP_ID,
@@ -59,8 +64,37 @@ import {
 import {languageLabel, SKILL_LANGUAGES} from '../lib/languages'
 import {formatUsageLabel} from '../lib/skillUsage'
 
+const AVATAR_PALETTES = [
+  { bg: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '#bfdbfe', text: '#1d4ed8' }, // 蓝
+  { bg: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '#bbf7d0', text: '#15803d' }, // 绿
+  { bg: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)', border: '#e9d5ff', text: '#7e22ce' }, // 紫
+  { bg: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', border: '#fed7aa', text: '#c2410c' }, // 橙
+  { bg: 'linear-gradient(135deg, #ecfeff 0%, #cffafe 100%)', border: '#a5f3fc', text: '#0e7490' }, // 青
+  { bg: 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)', border: '#fecdd3', text: '#be123c' }, // 玫红
+  { bg: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', border: '#cbd5e1', text: '#334155' }, // 板岩
+  { bg: 'linear-gradient(135deg, #fefce8 0%, #fef9c3 100%)', border: '#fef08a', text: '#a16207' }, // 琥珀
+]
+
+function getSkillAvatarTheme(nameOrId: string) {
+  let hash = 0
+  const clean = (nameOrId || '').trim()
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash << 5) - hash + clean.charCodeAt(i)
+    hash |= 0
+  }
+  const idx = Math.abs(hash) % AVATAR_PALETTES.length
+  const palette = AVATAR_PALETTES[idx]
+  const char = clean ? clean.charAt(0).toUpperCase() : 'S'
+  return { ...palette, char }
+}
+
 function parseSkillsLayout(value: unknown): SkillsLayout {
   return value === 'grouped' ? 'grouped' : 'flat'
+}
+
+/** 冲突、断链才算异常；仅源仓 / 仅副本是未接入或待整理，不是故障。 */
+function isIssueStatus(status: SkillEntry['status']): boolean {
+  return status === 'conflict' || status === 'broken_link'
 }
 
 type Props = {
@@ -204,6 +238,11 @@ export default function SkillsPage({
     () => new Set(),
   )
   const [query, setQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [selectedToolFilter, setSelectedToolFilter] = useState<string>('all')
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'all' | 'issues'>('all')
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const categoryPillsRef = useRef<HTMLDivElement | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
@@ -623,18 +662,123 @@ export default function SkillsPage({
     }
   }, [bulkMode, canRestoreBulk])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const isInput =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      if (e.key === '/' && !isInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    const el = categoryPillsRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth + 1) return
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      if (dy === 0) return
+      e.preventDefault()
+      el.scrollLeft += dy
+    }
+    el.addEventListener('wheel', onWheel, {passive: false})
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const availableToolIds = useMemo(() => {
+    const set = new Set<string>()
+    for (const s of skills) {
+      for (const loc of s.locations ?? []) {
+        if (loc.kind === 'symlink' || loc.kind === 'real_copy' || loc.kind === 'broken_link') {
+          set.add(loc.toolId)
+        }
+      }
+    }
+    return Array.from(set).sort()
+  }, [skills])
+
+  const issuesCount = useMemo(() => {
+    return skills.filter((s) => isIssueStatus(s.status)).length
+  }, [skills])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return skills
-    return skills.filter(
-      (s) => s.id.toLowerCase().includes(q) || (s.name ?? '').toLowerCase().includes(q),
-    )
-  }, [skills, query])
+    return skills.filter((s) => {
+      if (q) {
+        const matchId = s.id.toLowerCase().includes(q)
+        const matchName = (s.name ?? '').toLowerCase().includes(q)
+        const matchDesc = (s.description ?? '').toLowerCase().includes(q)
+        if (!matchId && !matchName && !matchDesc) return false
+      }
+      if (selectedCategory !== null) {
+        if ((s.group || DEFAULT_GROUP_ID) !== selectedCategory) return false
+      }
+      if (selectedToolFilter !== 'all') {
+        const linked = linkedToolIds(s)
+        if (!linked.includes(selectedToolFilter)) return false
+      }
+      if (selectedStatusFilter === 'issues') {
+        if (!isIssueStatus(s.status)) return false
+      }
+      return true
+    })
+  }, [skills, query, selectedCategory, selectedToolFilter, selectedStatusFilter])
 
-  const sections = useMemo(
-    () => buildSections(groups, skills, query),
-    [groups, skills, query],
-  )
+  const sections = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const match = (s: SkillEntry) => {
+      if (q) {
+        const matchId = s.id.toLowerCase().includes(q)
+        const matchName = (s.name ?? '').toLowerCase().includes(q)
+        const matchDesc = (s.description ?? '').toLowerCase().includes(q)
+        if (!matchId && !matchName && !matchDesc) return false
+      }
+      if (selectedToolFilter !== 'all') {
+        const linked = linkedToolIds(s)
+        if (!linked.includes(selectedToolFilter)) return false
+      }
+      if (selectedStatusFilter === 'issues') {
+        if (!isIssueStatus(s.status)) return false
+      }
+      return true
+    }
+
+    const ordered = sortGroupsForDisplay(groups)
+    const targetGroups =
+      selectedCategory !== null
+        ? ordered.filter((g) => g.id === selectedCategory)
+        : ordered
+
+    const res: GroupSection[] = []
+    for (const g of targetGroups) {
+      const list = skills.filter((s) => (s.group || DEFAULT_GROUP_ID) === g.id && match(s))
+      if (g.id === DEFAULT_GROUP_ID) {
+        if (list.length > 0) res.push({id: g.id, skills: list})
+        continue
+      }
+      if (
+        (q ||
+          selectedCategory !== null ||
+          selectedToolFilter !== 'all' ||
+          selectedStatusFilter !== 'all') &&
+        list.length === 0
+      ) {
+        continue
+      }
+      res.push({id: g.id, skills: list})
+    }
+    return res
+  }, [groups, skills, query, selectedCategory, selectedToolFilter, selectedStatusFilter])
 
   const sortedGroups = useMemo(() => sortGroupsForDisplay(groups), [groups])
 
@@ -688,7 +832,7 @@ export default function SkillsPage({
     if (!(target instanceof Element)) return false
     if (
       target.closest(
-        'button, a, input, textarea, select, label, .card-menu, .dialog-backdrop, .page-sticky-header, .select-action-bar',
+        'button, a, input, textarea, select, label, .card-menu, .dialog-backdrop, .page-sticky-header, .select-action-bar, .skill-group-header',
       )
     ) {
       return false
@@ -1343,10 +1487,10 @@ export default function SkillsPage({
     }
   }
 
-  function openCreateDialog() {
+  function openCreateDialog(initialGroup?: string) {
     setCreateId('')
     setCreateName('')
-    setCreateGroup(DEFAULT_GROUP_ID)
+    setCreateGroup(initialGroup || selectedCategory || DEFAULT_GROUP_ID)
     setCreateLanguage('zh-CN')
     setCreateGroupMenuOpen(false)
     setCreateLanguageMenuOpen(false)
@@ -1759,9 +1903,19 @@ export default function SkillsPage({
       'skill-card',
       selectMode ? 'is-selecting' : '',
       isSelected ? 'is-selected' : '',
+      skill.status !== 'normal' ? `has-issue status-${skill.status}` : '',
     ]
       .filter(Boolean)
       .join(' ')
+
+    const avatarTheme = getSkillAvatarTheme(skill.name || skill.id)
+    const hasDifferentId =
+      skill.id && skill.name && skill.id.toLowerCase() !== skill.name.toLowerCase()
+    const isCopied = copiedSkillId === skill.id
+    const usage = usageById[skill.id]
+    const usageCount = usage?.count ?? 0
+    const usageText = formatUsageLabel(usageCount, usage?.lastUsedAt)
+
     return (
       <article
         key={skill.id}
@@ -1790,110 +1944,139 @@ export default function SkillsPage({
           <span
             className={isSelected ? 'card-check is-checked' : 'card-check'}
             aria-hidden="true"
-          />
-        ) : (
-          <div
-            className="card-menu-wrap"
-            ref={menuOpen ? menuRef : undefined}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              className="card-menu-btn"
-              aria-label="更多操作"
-              onClick={() => setOpenMenuId(menuOpen ? null : skill.id)}
-            >
-              ⋯
-            </button>
-            {menuOpen ? (
-              <div className="card-menu">
-                <button type="button" onClick={() => void openSkillInFolder(skill)}>
-                  打开
-                </button>
-                <button type="button" onClick={() => openEnableDialog(skill)}>
-                  启用
-                </button>
-                <button type="button" onClick={() => openRenameDialog(skill)}>
-                  重命名
-                </button>
-                <button type="button" onClick={() => openAssignGroup(skill)}>
-                  分组
-                </button>
-                <button
-                  type="button"
-                  disabled={exporting}
-                  onClick={() => exportOneSkill(skill)}
-                >
-                  {exporting ? '导出中…' : '导出'}
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => openDeleteDialog(skill)}
-                >
-                  删除
-                </button>
-              </div>
+            {isSelected ? <IconCheck size={12} /> : null}
+          </span>
+        ) : null}
+
+        <div className="card-top-row">
+          <div
+            className="skill-avatar"
+            style={{
+              background: avatarTheme.bg,
+              borderColor: avatarTheme.border,
+              color: avatarTheme.text,
+            }}
+            aria-hidden="true"
+          >
+            <span>{avatarTheme.char}</span>
+            <span className={`avatar-status-dot status-${skill.status}`} />
+          </div>
+
+          <div className="skill-header-info">
+            <div className="skill-title-line">
+              <h3 title={skill.name || skill.id}>{skill.name || skill.id}</h3>
+              <button
+                type="button"
+                className={`skill-id-copy-btn ${isCopied ? 'is-copied' : ''}`}
+                aria-label={isCopied ? '已复制技能 ID' : `复制技能 ID: ${skill.id}`}
+                title={isCopied ? '已复制！' : `复制 ID: ${skill.id}`}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  void copySkillId(skill.id)
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                {isCopied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+              </button>
+            </div>
+            {hasDifferentId ? (
+              <p className="skill-id-sub" title={skill.id}>
+                @{skill.id}
+              </p>
             ) : null}
           </div>
-        )}
 
-        <div className="skill-name-row">
-          <h3>{skill.name || skill.id}</h3>
-          <button
-            type="button"
-            className={
-              copiedSkillId === skill.id
-                ? 'skill-id-copy-btn is-copied'
-                : 'skill-id-copy-btn'
-            }
-            aria-label={copiedSkillId === skill.id ? '已复制' : '复制技能 ID'}
-            title={copiedSkillId === skill.id ? '已复制' : '复制技能 ID'}
-            onClick={(e) => {
-              e.stopPropagation()
-              void copySkillId(skill.id)
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {copiedSkillId === skill.id ? (
-              <IconCheck size={14} />
-            ) : (
-              <IconCopy size={14} />
-            )}
-          </button>
+          {!selectMode ? (
+            <div
+              className="card-menu-wrap"
+              ref={menuOpen ? menuRef : undefined}
+              onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className={`card-menu-btn ${menuOpen ? 'is-active' : ''}`}
+                aria-label="更多操作"
+                onClick={() => setOpenMenuId(menuOpen ? null : skill.id)}
+              >
+                <IconMoreVertical size={16} />
+              </button>
+              {menuOpen ? (
+                <div className="card-menu">
+                  <button type="button" onClick={() => void openSkillInFolder(skill)}>
+                    打开目录
+                  </button>
+                  <button type="button" onClick={() => openEnableDialog(skill)}>
+                    配置工具链接…
+                  </button>
+                  <button type="button" onClick={() => openRenameDialog(skill)}>
+                    重命名
+                  </button>
+                  <button type="button" onClick={() => openAssignGroup(skill)}>
+                    设置分组…
+                  </button>
+                  <button
+                    type="button"
+                    disabled={exporting}
+                    onClick={() => exportOneSkill(skill)}
+                  >
+                    {exporting ? '导出中…' : '导出'}
+                  </button>
+                  <div className="menu-divider" />
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => openDeleteDialog(skill)}
+                  >
+                    删除技能
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        <p className="skill-id">{skill.id}</p>
-        <p className="desc">{skill.description || '暂无描述'}</p>
+
+        <p className="desc" title={skill.description || '暂无描述'}>
+          {skill.description || '暂无描述'}
+        </p>
+
         <div className="skill-lang-row">
-          <span className="skill-lang-left">
-            <span className="skill-lang-label">{languageLabel(skill.defaultLanguage)}</span>
+          <div className="skill-lang-left">
+            <span className="skill-lang-label">
+              {languageLabel(skill.defaultLanguage)}
+            </span>
             {(skill.translationCount ?? 0) > 0 ? (
               <span
                 className="skill-translation-count"
                 title={`${skill.translationCount} 个翻译版本`}
                 aria-label={`${skill.translationCount} 个翻译版本`}
               >
-                {skill.translationCount}
+                +{skill.translationCount} 译本
               </span>
             ) : null}
-          </span>
-          <span className="skill-usage muted">
-            {formatUsageLabel(
-              usageById[skill.id]?.count ?? 0,
-              usageById[skill.id]?.lastUsedAt,
-            )}
-          </span>
+          </div>
+          <span className="skill-usage muted">{usageText}</span>
         </div>
+
         <div className="skill-meta">
-          <span className={`badge status-${skill.status}`}>
-            {STATUS_LABELS[skill.status] ?? skill.status}
-          </span>
-          {toolsLinked.map((tid) => (
-            <span key={tid} className="badge tool">
-              {tid}
+          <div className="skill-tools-list">
+            {toolsLinked.length > 0 ? (
+              toolsLinked.map((tid) => (
+                <span key={tid} className="badge tool" title={`已链接到 ${tid}`}>
+                  <span className="tool-dot" />
+                  {tid}
+                </span>
+              ))
+            ) : (
+              <span className="badge unlinked">未接入工具</span>
+            )}
+          </div>
+          {skill.status !== 'normal' ? (
+            <span className={`badge status-${skill.status}`} title={STATUS_LABELS[skill.status]}>
+              {STATUS_LABELS[skill.status] ?? skill.status}
             </span>
-          ))}
+          ) : null}
         </div>
       </article>
     )
@@ -1907,91 +2090,200 @@ export default function SkillsPage({
       <AppToast toast={toast} onDismiss={dismissToast} />
       <div className="page-sticky-header">
         <div className="page-toolbar">
-          <button
-            type="button"
-            className={
-              layout === 'grouped'
-                ? 'btn btn-icon layout-toggle is-active'
-                : 'btn btn-icon layout-toggle'
-            }
-            data-tour="layout"
-            onClick={() => void toggleLayout()}
-            title={layout === 'flat' ? '切换到分组布局' : '切换到平铺布局'}
-            aria-label={layout === 'flat' ? '切换到分组布局' : '切换到平铺布局'}
-            aria-pressed={layout === 'grouped'}
-          >
-            {layout === 'flat' ? (
-              <IconLayoutList size={22} />
+          <div className="search-input-wrapper">
+            <IconSearch size={16} className="search-icon" />
+            <input
+              ref={searchInputRef}
+              type="search"
+              placeholder="搜索技能名称或 ID… (按 / 聚焦)"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="搜索技能"
+            />
+            {query ? (
+              <button
+                type="button"
+                className="search-clear-btn"
+                onClick={() => {
+                  setQuery('')
+                  searchInputRef.current?.focus()
+                }}
+                aria-label="清空搜索"
+                title="清空搜索"
+              >
+                <IconX size={14} />
+              </button>
             ) : (
-              <IconLayoutGrid size={22} />
+              <kbd className="search-kbd" title="按 / 键快速聚焦搜索框">
+                /
+              </kbd>
             )}
-          </button>
-          <input
-            type="search"
-            placeholder="搜索名称或 ID…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="搜索技能"
-          />
+          </div>
+
           <div className="toolbar-actions">
             <button
               type="button"
-              className="btn btn-primary btn-icon"
-              onClick={openCreateDialog}
-              title="新建"
-              aria-label="新建"
+              className="btn btn-primary btn-create-skill"
+              onClick={() => openCreateDialog()}
+              title="新建技能"
+              aria-label="新建技能"
             >
-              <IconPlus size={22} />
+              <IconPlus size={16} />
+              <span>新建技能</span>
             </button>
-            {layout === 'grouped' ? (
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-organize"
+              onClick={onOrganize}
+              data-tour="organize"
+              title="一键整理散落副本并建立符号链接"
+              aria-label="一键整理"
+            >
+              <IconFolderSync size={16} />
+              <span>一键整理</span>
+            </button>
+
+            <div className="toolbar-icon-group" role="group" aria-label="辅助操作">
+              <button
+                type="button"
+                className={
+                  layout === 'grouped'
+                    ? 'btn btn-icon layout-toggle is-active'
+                    : 'btn btn-icon layout-toggle'
+                }
+                data-tour="layout"
+                onClick={() => void toggleLayout()}
+                title={layout === 'flat' ? '切换到分组布局' : '切换到平铺布局'}
+                aria-label={layout === 'flat' ? '切换到分组布局' : '切换到平铺布局'}
+                aria-pressed={layout === 'grouped'}
+              >
+                {layout === 'flat' ? (
+                  <IconLayoutList size={18} />
+                ) : (
+                  <IconLayoutGrid size={18} />
+                )}
+              </button>
+
               <button
                 type="button"
                 className="btn btn-icon"
-                onClick={openCreateGroupDialog}
-                title="新增分组"
-                aria-label="新增分组"
+                onClick={() => void openBulkDialog()}
+                data-tour="bulk"
+                title="按工具批量启用 / 禁用"
+                aria-label="按工具批量启用 / 禁用"
               >
-                <IconFolderPlus size={22} />
+                <IconBulkToolLinks size={18} />
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-icon"
+                onClick={() => void openTrash()}
+                title="回收站"
+                aria-label="回收站"
+              >
+                <IconTrash size={18} />
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-icon"
+                onClick={() => void load()}
+                title="刷新技能列表"
+                aria-label="刷新技能列表"
+              >
+                <IconRefresh size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="category-pills-bar" role="tablist" aria-label="技能分类导航">
+          <div ref={categoryPillsRef} className="category-pills-scroll">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedCategory === null}
+              className={`category-pill ${selectedCategory === null ? 'is-active' : ''}`}
+              onClick={() => setSelectedCategory(null)}
+            >
+              <span className="pill-name">全部技能</span>
+              <span className="pill-count">{skills.length}</span>
+            </button>
+            {sortedGroups.map((g) => {
+              const count = skills.filter(
+                (s) => (s.group || DEFAULT_GROUP_ID) === g.id,
+              ).length
+              if (g.id === DEFAULT_GROUP_ID && count === 0) return null
+              const isActive = selectedCategory === g.id
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  className={`category-pill ${isActive ? 'is-active' : ''}`}
+                  onClick={() => setSelectedCategory(isActive ? null : g.id)}
+                >
+                  <span className="pill-name">{groupDisplayName(g.id)}</span>
+                  <span className="pill-count">{count}</span>
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              className="category-pill-add"
+              onClick={openCreateGroupDialog}
+              title="新增分组"
+              aria-label="新增分组"
+            >
+              <IconPlus size={13} />
+              <span>新增分组</span>
+            </button>
+          </div>
+
+          <div className="category-filters-right">
+            {availableToolIds.length > 0 ? (
+              <div className="tool-filter-wrap">
+                <select
+                  className="tool-filter-select"
+                  value={selectedToolFilter}
+                  onChange={(e) => setSelectedToolFilter(e.target.value)}
+                  aria-label="按已接入工具过滤"
+                  title="按已接入工具过滤"
+                >
+                  <option value="all">全部工具</option>
+                  {availableToolIds.map((tid) => (
+                    <option key={tid} value={tid}>
+                      已链接：{tid}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {issuesCount > 0 ? (
+              <button
+                type="button"
+                className={`issue-filter-pill ${selectedStatusFilter === 'issues' ? 'is-active' : ''}`}
+                onClick={() =>
+                  setSelectedStatusFilter(
+                    selectedStatusFilter === 'issues' ? 'all' : 'issues',
+                  )
+                }
+                title={
+                  selectedStatusFilter === 'issues'
+                    ? '点击显示全部技能'
+                    : `发现 ${issuesCount} 个异常技能（冲突或断链），点击查看`
+                }
+              >
+                <IconAlertTriangle size={13} />
+                <span>{issuesCount} 项异常</span>
               </button>
             ) : null}
-            <button
-              type="button"
-              className="btn btn-icon"
-              onClick={onOrganize}
-              data-tour="organize"
-              title="一键整理"
-              aria-label="一键整理"
-            >
-              <IconFolderSync size={22} />
-            </button>
-            <button
-              type="button"
-              className="btn btn-icon"
-              onClick={() => void load()}
-              title="刷新"
-              aria-label="刷新"
-            >
-              <IconRefresh size={22} />
-            </button>
-            <button
-              type="button"
-              className="btn btn-icon"
-              onClick={() => void openTrash()}
-              title="回收站"
-              aria-label="回收站"
-            >
-              <IconTrash size={22} />
-            </button>
-            <button
-              type="button"
-              className="btn btn-icon"
-              onClick={() => void openBulkDialog()}
-              data-tour="bulk"
-              title="按工具批量启用 / 禁用"
-              aria-label="按工具批量启用 / 禁用"
-            >
-              <IconBulkToolLinks size={22} />
-            </button>
+
+            <span className="items-total-counter">共 {filtered.length} 项</span>
           </div>
         </div>
       </div>
@@ -2958,85 +3250,154 @@ export default function SkillsPage({
           <span>松开以导入 skill 文件夹、zip 或 .skill 包</span>
         </div>
         {loading ? (
-          <p className="muted">加载中…</p>
+          <div className="skills-loading-state">
+            <span className="skills-spinner" />
+            <p className="muted">正在加载技能与工具状态…</p>
+          </div>
         ) : showEmpty ? (
           <div className="empty-state">
-            暂无技能{query ? '（无匹配结果）' : '，可拖入文件夹、zip 或 .skill 包导入'}
+            <div className="empty-icon-wrap">
+              <IconSparkles size={28} />
+            </div>
+            <h3>
+              {query
+                ? '未找到匹配的技能'
+                : selectedCategory
+                  ? `「${groupDisplayName(selectedCategory)}」分组暂无技能`
+                  : '暂无技能'}
+            </h3>
+            <p className="muted">
+              {query
+                ? '尝试更换搜索关键词，或清除当前过滤条件'
+                : selectedCategory
+                  ? '点击下方按钮在此分组中新建技能，或将技能文件拖入导入'
+                  : '可拖入 skill 文件夹、zip 包导入，或直接点击下方按钮新建'}
+            </p>
+            <div className="empty-actions">
+              {query ||
+              selectedCategory ||
+              selectedToolFilter !== 'all' ||
+              selectedStatusFilter !== 'all' ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setQuery('')
+                    setSelectedCategory(null)
+                    setSelectedToolFilter('all')
+                    setSelectedStatusFilter('all')
+                  }}
+                >
+                  重置筛选条件
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => openCreateDialog(selectedCategory ?? undefined)}
+              >
+                <IconPlus size={16} />
+                <span>新建技能</span>
+              </button>
+            </div>
           </div>
         ) : layout === 'grouped' ? (
           <div className="skill-groups">
             {sections.map((sec) => {
               const collapsed = isGroupCollapsed(sec.id, sec.skills.length)
               return (
-              <section className="skill-group-section" key={sec.id}>
-                <div
-                  className="skill-group-header"
-                  onMouseEnter={() => {
-                    if (!selectMode) showGroupActions(sec.id)
-                  }}
-                  onMouseLeave={() => {
-                    if (!selectMode) scheduleHideGroupActions()
-                  }}
+                <section
+                  className={`skill-group-section ${collapsed ? 'is-collapsed' : ''}`}
+                  key={sec.id}
                 >
-                  <div className="skill-group-title-row">
-                    <h2>{groupDisplayName(sec.id)}</h2>
-                    <button
-                      type="button"
-                      className="skill-group-collapse"
-                      aria-label={collapsed ? '展开分组' : '折叠分组'}
-                      aria-expanded={!collapsed}
-                      onClick={() => toggleGroupCollapse(sec.id)}
-                    >
-                      <IconChevron
-                        size={20}
-                        className={`skill-group-collapse-chevron${collapsed ? '' : ' open'}`}
-                      />
-                    </button>
-                  </div>
-                  <div className="skill-group-header-trailing">
-                    {selectMode ? (
+                  <div
+                    className="skill-group-header"
+                    onMouseEnter={() => {
+                      if (!selectMode) showGroupActions(sec.id)
+                    }}
+                    onMouseLeave={() => {
+                      if (!selectMode) scheduleHideGroupActions()
+                    }}
+                  >
+                    <div className="skill-group-title-row">
+                      <h2>{groupDisplayName(sec.id)}</h2>
+                      <span className="group-count-badge" title={`${sec.skills.length} 个技能`}>
+                        {sec.skills.length}
+                      </span>
                       <button
                         type="button"
-                        className="skill-group-select-all"
-                        disabled={
-                          batchEnabling ||
-                          assigning ||
-                          confirmBusy ||
-                          sec.skills.length === 0
-                        }
-                        onClick={() => toggleSelectAllInGroup(sec.skills)}
+                        className="skill-group-collapse"
+                        aria-label={collapsed ? '展开分组' : '折叠分组'}
+                        aria-expanded={!collapsed}
+                        onClick={() => toggleGroupCollapse(sec.id)}
                       >
-                        {sec.skills.length > 0 &&
-                        sec.skills.every((s) => selectedIds.has(s.id))
-                          ? '取消全选'
-                          : '全选'}
+                        <IconChevron
+                          size={18}
+                          className={`skill-group-collapse-chevron${collapsed ? '' : ' open'}`}
+                        />
                       </button>
-                    ) : sec.id !== DEFAULT_GROUP_ID &&
-                      actionsVisibleGroupId === sec.id ? (
-                      <div className="skill-group-actions">
+                    </div>
+
+                    <div className="skill-group-header-trailing">
+                      {selectMode ? (
                         <button
                           type="button"
-                          aria-label="编辑分组"
-                          onClick={() => openRenameGroup(sec.id)}
+                          className="skill-group-select-all"
+                          disabled={
+                            batchEnabling ||
+                            assigning ||
+                            confirmBusy ||
+                            sec.skills.length === 0
+                          }
+                          onClick={() => toggleSelectAllInGroup(sec.skills)}
                         >
-                          <IconPencil size={16} />
+                          {sec.skills.length > 0 &&
+                          sec.skills.every((s) => selectedIds.has(s.id))
+                            ? '取消全选'
+                            : '全选本组'}
                         </button>
-                        <button
-                          type="button"
-                          className="danger"
-                          aria-label="删除分组"
-                          onClick={() => openDeleteGroupDialog(sec.id)}
-                        >
-                          <IconTrash size={16} />
-                        </button>
-                      </div>
-                    ) : null}
+                      ) : actionsVisibleGroupId === sec.id ? (
+                        <div className="skill-group-actions">
+                          <button
+                            type="button"
+                            className="group-action-btn group-action-add"
+                            title={`在「${groupDisplayName(sec.id)}」新建技能`}
+                            aria-label={`在「${groupDisplayName(sec.id)}」新建技能`}
+                            onClick={() => openCreateDialog(sec.id)}
+                          >
+                            <IconPlus size={14} />
+                            <span>新建</span>
+                          </button>
+                          {sec.id !== DEFAULT_GROUP_ID ? (
+                            <>
+                              <button
+                                type="button"
+                                className="group-action-btn"
+                                aria-label="编辑分组名称"
+                                title="编辑分组名称"
+                                onClick={() => openRenameGroup(sec.id)}
+                              >
+                                <IconPencil size={15} />
+                              </button>
+                              <button
+                                type="button"
+                                className="group-action-btn danger"
+                                aria-label="删除分组"
+                                title="删除分组"
+                                onClick={() => openDeleteGroupDialog(sec.id)}
+                              >
+                                <IconTrash size={15} />
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-                {collapsed ? null : (
-                  <div className="skill-grid">{sec.skills.map(renderSkillCard)}</div>
-                )}
-              </section>
+                  {collapsed ? null : (
+                    <div className="skill-grid">{sec.skills.map(renderSkillCard)}</div>
+                  )}
+                </section>
               )
             })}
           </div>
@@ -3058,7 +3419,7 @@ export default function SkillsPage({
       ) : null}
       {selectMode ? (
         <div className="select-action-bar" role="toolbar" aria-label="多选操作">
-          <span className="select-count">已选 {selectedIds.size}</span>
+          <span className="select-count">已选 {selectedIds.size} 项</span>
           <button
             type="button"
             className="btn btn-ghost"
@@ -3076,7 +3437,7 @@ export default function SkillsPage({
             disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
             onClick={openBatchEnableDialog}
           >
-            启用
+            配置工具…
           </button>
           <button
             type="button"
@@ -3084,7 +3445,7 @@ export default function SkillsPage({
             disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
             onClick={openBatchAssignGroup}
           >
-            分组
+            移动分组…
           </button>
           <button
             type="button"
@@ -3092,7 +3453,7 @@ export default function SkillsPage({
             disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
             onClick={exportSelectedSkills}
           >
-            {exporting ? '导出中…' : '导出'}
+            {exporting ? '导出中…' : '批量导出'}
           </button>
           <button
             type="button"
@@ -3102,7 +3463,7 @@ export default function SkillsPage({
           >
             {confirmBusy && confirmDialog?.kind === 'delete-skills-batch'
               ? '删除中…'
-              : '删除'}
+              : '批量删除'}
           </button>
           <button
             type="button"
@@ -3110,7 +3471,7 @@ export default function SkillsPage({
             disabled={batchEnabling || assigning || confirmBusy || exporting}
             onClick={exitSelectMode}
           >
-            取消
+            完成
           </button>
         </div>
       ) : null}
