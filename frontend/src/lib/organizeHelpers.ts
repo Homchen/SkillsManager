@@ -259,3 +259,18 @@ export function calculateOrganizeMetrics(
   }
 }
 
+/** 把深度扫描回调路径拆成祖先面包屑 + 当前目录名，便于进度条突出“正在走进哪一层”。 */
+export function splitScanWalkPath(path: string): {leaf: string; crumbs: string[]; full: string} {
+  const full = path.trim()
+  if (!full) {
+    return {leaf: '', crumbs: [], full: ''}
+  }
+  const parts = full.split(/[/\\]+/).filter((part) => part.length > 0)
+  if (parts.length === 0) {
+    return {leaf: full, crumbs: [], full}
+  }
+  const leaf = parts[parts.length - 1]
+  const crumbStart = Math.max(0, parts.length - 5)
+  return {leaf, crumbs: parts.slice(crumbStart, -1), full}
+}
+

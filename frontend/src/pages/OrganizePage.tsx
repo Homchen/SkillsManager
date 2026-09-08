@@ -62,6 +62,7 @@ import {
   isOrganizeActionSelectable,
   normalizeCanExecute,
   organizeSelectionState,
+  splitScanWalkPath,
 } from '../lib/organizeHelpers'
 
 type OrganizePlan = domain.OrganizePlan
@@ -156,7 +157,6 @@ export default function OrganizePage({onBack}: Props) {
   const [conflictOpen, setConflictOpen] = useState(false)
   const [dialogError, setDialogError] = useState('')
   const [canExecute, setCanExecute] = useState(false)
-  const [blockReason, setBlockReason] = useState('')
   const [report, setReport] = useState<OrganizeReport | null>(null)
   const [reportOpen, setReportOpen] = useState(false)
   const [workdirDialogOpen, setWorkdirDialogOpen] = useState(false)
@@ -181,6 +181,7 @@ export default function OrganizePage({onBack}: Props) {
   const planCommitRef = useRef(Promise.resolve())
   const [deepScanning, setDeepScanning] = useState(false)
   const [deepProgress, setDeepProgress] = useState('')
+  const [deepVisitCount, setDeepVisitCount] = useState(0)
   const [applyingRound, setApplyingRound] = useState(false)
   const [isConflictMaximized, setIsConflictMaximized] = useState(false)
   const [actionQuery, setActionQuery] = useState('')
@@ -218,17 +219,14 @@ export default function OrganizePage({onBack}: Props) {
   const refreshGate = useCallback(async () => {
     if (!plan) {
       setCanExecute(false)
-      setBlockReason('请先扫描工作目录或深度扫描')
       return
     }
     try {
       const result = await CanExecuteOrganize()
-      const {ok, reason} = normalizeCanExecute(result)
+      const {ok} = normalizeCanExecute(result)
       setCanExecute(ok)
-      setBlockReason(ok ? '' : reason || '当前无法执行整理')
-    } catch (e) {
+    } catch {
       setCanExecute(false)
-      setBlockReason(errMsg(e))
     }
   }, [plan])
 
@@ -271,6 +269,7 @@ export default function OrganizePage({onBack}: Props) {
     const offDeep = EventsOn('deepscan:progress', (...data: unknown[]) => {
       const path = typeof data[0] === 'string' ? data[0] : String(data[0] ?? '')
       setDeepProgress(path)
+      setDeepVisitCount((n) => n + 1)
     })
     const offRestore = EventsOn('restoreorphan:progress', (...data: unknown[]) => {
       const path = typeof data[0] === 'string' ? data[0] : String(data[0] ?? '')
@@ -441,7 +440,7 @@ export default function OrganizePage({onBack}: Props) {
       const gate = normalizeCanExecute(await CanExecuteOrganize())
       if (!gate.ok) {
         setCanExecute(false)
-        setBlockReason(gate.reason || '当前无法执行整理')
+        showToast({message: gate.reason || '当前无法执行整理', tone: 'warn'})
         return
       }
       const result = await ExecuteOrganize()
@@ -518,12 +517,14 @@ export default function OrganizePage({onBack}: Props) {
   async function handleDeepScan() {
     setDeepScanning(true)
     setDeepProgress('')
+    setDeepVisitCount(0)
     setError('')
     try {
       const extras = await DeepScanSkills()
       const extraCount = extras?.length ?? 0
       setDeepScanning(false)
       setDeepProgress('')
+      setDeepVisitCount(0)
       await loadPreview({
         keepDeepScan: true,
         toastMessage:
@@ -536,6 +537,7 @@ export default function OrganizePage({onBack}: Props) {
     } finally {
       setDeepScanning(false)
       setDeepProgress('')
+      setDeepVisitCount(0)
     }
   }
 
@@ -649,6 +651,7 @@ export default function OrganizePage({onBack}: Props) {
     () => calculateOrganizeMetrics(actions, conflicts),
     [actions, conflicts],
   )
+  const deepWalk = useMemo(() => splitScanWalkPath(deepProgress), [deepProgress])
   const actionSections = useMemo(() => groupActionsByType(actions), [actions])
 
   // 按类型过滤
@@ -791,7 +794,9 @@ export default function OrganizePage({onBack}: Props) {
                       : '深度扫描：重新扫描整个用户主目录，完成后刷新预览'
                   }
                 >
-                  <IconSearch size={16} className={deepScanning ? 'is-spinning' : ''} />
+                  <span className={deepScanning ? 'organize-search-busy' : 'organize-search-icon'}>
+                    <IconSearch size={16} />
+                  </span>
                 </button>
               ) : null}
 
@@ -972,17 +977,38 @@ export default function OrganizePage({onBack}: Props) {
         </div>
       ) : null}
 
-      {deepScanning && deepProgress ? (
-        <div className="organize-progress-banner">
-          <div className="organize-progress-text">
-            <IconSearch size={16} className="is-spinning" />
-            <span>深度扫描进行中：</span>
-            <span className="mono">{deepProgress}</span>
+      {deepScanning ? (
+        <section className="organize-scan-panel" aria-live="polite" aria-label="深度扫描进度">
+          <div className="organize-scan-panel-head">
+            <div className="organize-scan-panel-mark" aria-hidden="true">
+              <span className="organize-search-busy">
+                <IconSearch size={18} />
+              </span>
+            </div>
+            <div className="organize-scan-panel-titles">
+              <p className="organize-scan-panel-kicker">全盘查找散落技能</p>
+              <h3 className="organize-scan-panel-title">深度扫描进行中</h3>
+            </div>
+            <div className="organize-scan-panel-stat">
+              <strong>{deepVisitCount.toLocaleString('zh-CN')}</strong>
+              <span>个目录</span>
+            </div>
+            <button type="button" className="organize-scan-cancel" onClick={handleCancelDeepScan}>
+              <IconX size={14} />
+              <span>取消</span>
+            </button>
           </div>
-          <button type="button" className="btn btn-sm" onClick={handleCancelDeepScan}>
-            取消扫描
-          </button>
-        </div>
+          <div className="organize-scan-beam" aria-hidden="true" />
+          <p className="organize-scan-panel-path" title={deepWalk.full || undefined}>
+            {deepWalk.crumbs.length > 0 ? (
+              <span className="organize-scan-crumbs">
+                {deepWalk.crumbs.join(' › ')}
+                <span className="organize-scan-sep">›</span>
+              </span>
+            ) : null}
+            <span className="organize-scan-leaf">{deepWalk.leaf || '正在启动…'}</span>
+          </p>
+        </section>
       ) : null}
 
       {restoreScanning && restoreProgress ? (
@@ -1000,22 +1026,6 @@ export default function OrganizePage({onBack}: Props) {
           <span>
             冲突已全部决议完成！请点击右上角「执行整理」完成向源仓迁入并挂载符号链接。
           </span>
-        </div>
-      ) : null}
-
-      {plan && !canExecute && blockReason ? (
-        <div className="warn-banner">
-          <span>{blockReason}</span>
-          {conflicts.length > 0 ? (
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => openConflictDialog()}
-              style={{marginLeft: 8, fontWeight: 600}}
-            >
-              立即打开冲突处理
-            </button>
-          ) : null}
         </div>
       ) : null}
 
@@ -1089,13 +1099,12 @@ export default function OrganizePage({onBack}: Props) {
                 onClick={() => (deepScanning ? handleCancelDeepScan() : void handleDeepScan())}
                 title="扫描整个用户主目录查找未登记技能，完成后进入预览"
               >
-                <IconSearch size={16} className={deepScanning ? 'is-spinning' : ''} />
+                <span className={deepScanning ? 'organize-search-busy' : 'organize-search-icon'}>
+                  <IconSearch size={16} />
+                </span>
                 <span>{deepScanning ? '取消扫描' : '深度扫描'}</span>
               </button>
             </div>
-            <p className="organize-hero-scan-hint">
-              两个按钮都会重新扫描对应范围，完成后进入预览。工作目录是设置里已添加的工具目录；深度扫描覆盖整个用户主目录。
-            </p>
           </div>
         </section>
       ) : (

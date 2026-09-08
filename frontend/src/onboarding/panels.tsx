@@ -266,9 +266,6 @@ export function DemoOrganize({
                 <span>深度扫描</span>
               </button>
             </div>
-            <p className="organize-hero-scan-hint">
-              两个按钮都会重新扫描对应范围，完成后进入预览。工作目录是设置里已添加的工具目录；深度扫描覆盖整个用户主目录。
-            </p>
           </div>
         </section>
       ) : (

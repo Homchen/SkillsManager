@@ -13,6 +13,7 @@ import {
   matchesOrganizeActionSearch,
   normalizeCanExecute,
   organizeSelectionState,
+  splitScanWalkPath,
   type ConflictSkillLike,
 } from './organizeHelpers'
 
@@ -388,6 +389,38 @@ describe('calculateOrganizeMetrics', () => {
     expect(metrics.unresolvedConflictCount).toBe(1)
     expect(metrics.toggleableCount).toBe(5) // move_to_hub(2) + replace(1) + conflict(1) + fix(1)
     expect(metrics.selectedCount).toBe(3) // 1 move + 1 replace + 1 conflict
+  })
+})
+
+describe('splitScanWalkPath', () => {
+  it('returns empty parts for blank input', () => {
+    expect(splitScanWalkPath('')).toEqual({leaf: '', crumbs: [], full: ''})
+    expect(splitScanWalkPath('   ')).toEqual({leaf: '', crumbs: [], full: ''})
+  })
+
+  it('keeps the current folder and last few ancestors on Windows paths', () => {
+    expect(
+      splitScanWalkPath(
+        'C:\\Users\\Administrator\\.claude\\plugins\\marketplaces\\discord\\skills',
+      ),
+    ).toEqual({
+      leaf: 'skills',
+      crumbs: ['.claude', 'plugins', 'marketplaces', 'discord'],
+      full: 'C:\\Users\\Administrator\\.claude\\plugins\\marketplaces\\discord\\skills',
+    })
+  })
+
+  it('handles posix paths and a single segment', () => {
+    expect(splitScanWalkPath('/home/ada/.cursor/skills')).toEqual({
+      leaf: 'skills',
+      crumbs: ['home', 'ada', '.cursor'],
+      full: '/home/ada/.cursor/skills',
+    })
+    expect(splitScanWalkPath('skills')).toEqual({
+      leaf: 'skills',
+      crumbs: [],
+      full: 'skills',
+    })
   })
 })
 

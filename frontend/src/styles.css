@@ -3248,16 +3248,6 @@ body.is-marquee-selecting * {
   margin: 0 0 12px;
 }
 
-.warn-banner {
-  background: #fffbeb;
-  color: #92400e;
-  border: 1px solid #fcd34d;
-  border-radius: 6px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  font-size: 13px;
-}
-
 .info-banner {
   background: #eff6ff;
   color: #1e3a8a;
@@ -3480,6 +3470,109 @@ body.is-marquee-selecting * {
 .organize-header-tools .is-spinning,
 .organize-header-right .btn-execute .is-spinning {
   animation: spin 0.8s linear infinite;
+}
+
+.organize-header-tools,
+.organize-header-tools .btn-icon {
+  overflow: visible;
+}
+
+.organize-search-icon,
+.organize-search-busy {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.organize-search-busy {
+  overflow: hidden;
+}
+
+.organize-search-busy svg {
+  display: block;
+  position: relative;
+  z-index: 1;
+  animation: organize-search-glow 1.7s ease-in-out infinite;
+}
+
+.organize-search-busy::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 7px;
+  height: 7px;
+  z-index: 3;
+  background: #fff;
+  clip-path: polygon(
+    50% 0%,
+    62% 38%,
+    100% 50%,
+    62% 62%,
+    50% 100%,
+    38% 62%,
+    0% 50%,
+    38% 38%
+  );
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+  pointer-events: none;
+  animation: organize-search-spark 1.7s ease-in-out infinite;
+}
+
+.organize-search-busy::after {
+  content: '';
+  position: absolute;
+  inset: -30% -80%;
+  z-index: 2;
+  background: linear-gradient(
+    115deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.2) 46%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(219, 234, 254, 0.75) 53%,
+    rgba(255, 255, 255, 0.2) 58%,
+    transparent 64%
+  );
+  pointer-events: none;
+  animation: organize-search-flash 1.7s ease-in-out infinite;
+}
+
+@keyframes organize-search-flash {
+  0%,
+  56% {
+    transform: translateX(-75%);
+  }
+  82%,
+  100% {
+    transform: translateX(75%);
+  }
+}
+
+@keyframes organize-search-glow {
+  0%,
+  56%,
+  100% {
+    filter: brightness(1);
+  }
+  70% {
+    filter: brightness(1.65) drop-shadow(0 0 3px currentColor);
+  }
+}
+
+@keyframes organize-search-spark {
+  0%,
+  62%,
+  86%,
+  100% {
+    opacity: 0;
+    transform: scale(0.15) rotate(0deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1) rotate(18deg);
+  }
 }
 
 .organize-header-right .organize-header-cta {
@@ -3817,15 +3910,6 @@ body.is-marquee-selecting * {
 .organize-hero-actions .btn svg {
   display: block;
   flex-shrink: 0;
-}
-
-.organize-hero-scan-hint {
-  margin: 0;
-  max-width: 36em;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--muted);
-  text-align: center;
 }
 
 .btn-hero-primary {
@@ -4493,12 +4577,177 @@ body.is-marquee-selecting * {
   min-width: 0;
 }
 
+.organize-progress-text .organize-search-busy {
+  color: var(--accent);
+}
+
 .organize-progress-text .mono {
   color: var(--muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.organize-scan-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.organize-scan-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.organize-scan-panel-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, #fff);
+}
+
+.organize-scan-panel-titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.organize-scan-panel-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.organize-scan-panel-title {
+  margin: 1px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.organize-scan-panel-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  flex-shrink: 0;
+}
+
+.organize-scan-panel-stat strong {
+  font-size: 18px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.organize-scan-panel-stat span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.organize-scan-cancel {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: #64748b;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.organize-scan-cancel:hover {
+  border-color: #fca5a5;
+  color: var(--danger);
+  background: #fef2f2;
+}
+
+.organize-scan-beam {
+  position: relative;
+  height: 3px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e8eef7;
+}
+
+.organize-scan-beam::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 34%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 40%, transparent),
+    var(--accent),
+    color-mix(in srgb, var(--accent) 40%, transparent),
+    transparent
+  );
+  animation: organize-scan-beam 1.15s linear infinite;
+}
+
+@keyframes organize-scan-beam {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+
+.organize-scan-panel-path {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.organize-scan-crumbs {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.organize-scan-sep {
+  margin: 0 6px;
+  color: #cbd5e1;
+}
+
+.organize-scan-leaf {
+  flex: 0 1 auto;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--text);
 }
 
 /* 冲突工作台增强 (Conflict Dialog Enhanced) */
