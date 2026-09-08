@@ -41,6 +41,7 @@ import {
   IconFolderSync,
   IconLayoutGrid,
   IconLayoutList,
+  IconLink,
   IconMoreVertical,
   IconPencil,
   IconPlus,
@@ -66,7 +67,9 @@ import {
   type TrashItem,
 } from '../types'
 import {languageLabel, SKILL_LANGUAGES} from '../lib/languages'
+import {formatEnableDelta, toolPresence, toolPresenceLabel} from '../lib/skillToolLinks'
 import {formatUsageLabel} from '../lib/skillUsage'
+import {getToolBadge} from '../lib/toolBadge'
 
 const AVATAR_PALETTES = [
   { bg: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '#bfdbfe', text: '#1d4ed8' }, // 蓝
@@ -650,6 +653,49 @@ export default function SkillsPage({
     () => tools.filter((t) => t.enabled && !t.isHub),
     [tools],
   )
+
+  const enableLinkDelta = useMemo(() => {
+    if (!enableSkill) return {add: 0, remove: 0}
+    let add = 0
+    let remove = 0
+    for (const tool of linkableTools) {
+      const want = enableSelected.has(tool.id)
+      const current = hasSymlink(enableSkill, tool.id)
+      if (want && !current) add++
+      if (!want && current) remove++
+    }
+    return {add, remove}
+  }, [enableSkill, enableSelected, linkableTools])
+
+  const enableToolRows = useMemo(() => {
+    if (!enableSkill) return linkableTools
+    const linked: ToolMapping[] = []
+    const rest: ToolMapping[] = []
+    for (const tool of linkableTools) {
+      if (hasSymlink(enableSkill, tool.id)) linked.push(tool)
+      else rest.push(tool)
+    }
+    return [...linked, ...rest]
+  }, [enableSkill, linkableTools])
+
+  const enableAvatarTheme = enableSkill
+    ? getSkillAvatarTheme(enableSkill.name || enableSkill.id)
+    : null
+  const enableDirty = enableLinkDelta.add + enableLinkDelta.remove > 0
+
+  useEffect(() => {
+    if (!enableOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      if (enabling) return
+      setEnableOpen(false)
+      setEnableSkill(null)
+      setEnableError('')
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [enableOpen, enabling])
 
   const canRestoreBulk = useMemo(
     () => [...bulkSelected].some((id) => (bulkSnapshots[id]?.count ?? 0) > 0),
@@ -1298,6 +1344,15 @@ export default function SkillsPage({
       if (next.has(toolId)) next.delete(toolId)
       else next.add(toolId)
       return next
+    })
+  }
+
+  function toggleEnableSelectAll() {
+    setEnableSelected((prev) => {
+      if (linkableTools.length > 0 && prev.size === linkableTools.length) {
+        return new Set()
+      }
+      return new Set(linkableTools.map((t) => t.id))
     })
   }
 
@@ -2372,54 +2427,164 @@ export default function SkillsPage({
       ) : null}
 
       {enableOpen && enableSkill ? (
-        <div
-          className="dialog-backdrop"
-          role="presentation"
-        >
+        <div className="dialog-backdrop" role="presentation">
           <div
-            className="dialog"
+            className="dialog dialog-link-tools"
             role="dialog"
+            aria-modal="true"
             aria-labelledby="enable-tools-title"
+            aria-describedby="enable-tools-desc"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="enable-tools-title">启用工具链接</h2>
-            <p className="muted">技能：{enableSkill.name || enableSkill.id}</p>
-            {linkableTools.length === 0 ? (
-              <p className="muted">暂无可用工具，请先在设置中配置并启用工具路径。</p>
-            ) : (
-              <div className="enable-tool-list">
-                {linkableTools.map((tool) => (
-                  <label key={tool.id} className="check-field enable-tool-item">
-                    <input
-                      type="checkbox"
-                      checked={enableSelected.has(tool.id)}
-                      disabled={enabling}
-                      onChange={() => toggleEnableTool(tool.id)}
-                    />
-                    <span>{tool.id}</span>
-                  </label>
-                ))}
+            <header className="link-tools-head">
+              <div className="link-tools-head-main">
+                {enableAvatarTheme ? (
+                  <div
+                    className="skill-avatar link-tools-avatar"
+                    style={{
+                      background: enableAvatarTheme.bg,
+                      borderColor: enableAvatarTheme.border,
+                      color: enableAvatarTheme.text,
+                    }}
+                    aria-hidden="true"
+                  >
+                    <span>{enableAvatarTheme.char}</span>
+                  </div>
+                ) : null}
+                <div className="link-tools-head-text">
+                  <h2 id="enable-tools-title">配置工具链接</h2>
+                  <p id="enable-tools-desc" className="link-tools-desc">
+                    <span className="link-tools-skill">{enableSkill.name || enableSkill.id}</span>
+                    <span aria-hidden="true"> · </span>
+                    打开开关后，该技能会以符号链接出现在对应工具目录
+                  </p>
+                </div>
               </div>
-            )}
-            {enableError ? <div className="dialog-error">{enableError}</div> : null}
-            <div className="dialog-actions">
               <button
                 type="button"
-                className="btn"
+                className="btn btn-icon link-tools-close"
+                aria-label="关闭"
                 disabled={enabling}
                 onClick={closeEnableDialog}
               >
-                取消
+                <IconX size={16} />
               </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={enabling || linkableTools.length === 0}
-                onClick={() => void handleEnableConfirm()}
-              >
-                {enabling ? '保存中…' : '确认'}
-              </button>
+            </header>
+
+            <div className="link-tools-body">
+              {linkableTools.length === 0 ? (
+                <div className="link-tools-empty">
+                  <IconLink size={22} />
+                  <p className="link-tools-empty-title">暂无可用工具</p>
+                  <p className="muted">请先在设置中配置并启用工具路径</p>
+                </div>
+              ) : (
+                <>
+                  <div className="link-tools-toolbar">
+                    <span className="link-tools-count">
+                      开启 {enableSelected.size} / {linkableTools.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={enabling}
+                      onClick={toggleEnableSelectAll}
+                    >
+                      {enableSelected.size === linkableTools.length ? '全部关闭' : '全部开启'}
+                    </button>
+                  </div>
+                  <div className="link-tools-grid">
+                    {enableToolRows.map((tool) => {
+                      const want = enableSelected.has(tool.id)
+                      const presence = toolPresence(enableSkill, tool.id)
+                      const currentlyOn = presence === 'linked' || presence === 'broken'
+                      const willAdd = want && !currentlyOn
+                      const willRemove = !want && currentlyOn
+                      const status = toolPresenceLabel(presence, want)
+                      const badge = getToolBadge(tool.id)
+                      const showIdHint =
+                        badge.displayName.trim().toLowerCase() !== tool.id.trim().toLowerCase()
+                      const tileClass = [
+                        'link-tool-tile',
+                        want ? 'is-on' : '',
+                        willAdd ? 'is-will-add' : '',
+                        willRemove ? 'is-will-remove' : '',
+                        presence === 'broken' ? 'is-broken' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')
+                      return (
+                        <label
+                          key={tool.id}
+                          className={tileClass}
+                          title={tool.path || tool.id}
+                        >
+                          <span
+                            className="settings-tool-avatar sm"
+                            style={{
+                              background: badge.gradient,
+                              color: '#ffffff',
+                              boxShadow: `0 1px 4px ${badge.shadowColor}`,
+                            }}
+                            aria-hidden="true"
+                          >
+                            {badge.letter}
+                          </span>
+                          <span className="link-tool-copy">
+                            <span className="link-tool-name">{badge.displayName}</span>
+                            <span className="link-tool-status">
+                              {showIdHint ? `${tool.id} · ${status}` : status}
+                            </span>
+                          </span>
+                          <span className="switch">
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              checked={want}
+                              disabled={enabling}
+                              aria-checked={want}
+                              aria-label={`${tool.id}，${status}`}
+                              onChange={() => toggleEnableTool(tool.id)}
+                            />
+                            <span className="switch-ui" aria-hidden="true" />
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
             </div>
+
+            {enableError ? <div className="dialog-error link-tools-error">{enableError}</div> : null}
+
+            <footer className="link-tools-foot">
+              <p
+                className={
+                  enableDirty ? 'link-tools-delta is-dirty' : 'link-tools-delta'
+                }
+              >
+                {formatEnableDelta(enableLinkDelta.add, enableLinkDelta.remove)}
+              </p>
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={enabling}
+                  onClick={closeEnableDialog}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={enabling || linkableTools.length === 0 || !enableDirty}
+                  onClick={() => void handleEnableConfirm()}
+                >
+                  {enabling ? '保存中…' : '保存'}
+                </button>
+              </div>
+            </footer>
           </div>
         </div>
       ) : null}
