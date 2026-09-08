@@ -31,6 +31,7 @@ import {AppToast, useAppToast} from '../components/AppToast'
 import {Select} from '../components/Select'
 import {
   IconAlertTriangle,
+  IconArrowRight,
   IconBulkToolLinks,
   IconCheck,
   IconChevron,
@@ -67,6 +68,13 @@ import {
   type TrashItem,
 } from '../types'
 import {languageLabel, SKILL_LANGUAGES} from '../lib/languages'
+import {
+  batchGroupOverlap,
+  countBatchMoves,
+  countSkillsByGroup,
+  filterGroupsByQuery,
+  formatAssignDelta,
+} from '../lib/assignGroup'
 import {formatEnableDelta, toolPresence, toolPresenceLabel} from '../lib/skillToolLinks'
 import {formatUsageLabel} from '../lib/skillUsage'
 import {getToolBadge} from '../lib/toolBadge'
@@ -266,6 +274,7 @@ export default function SkillsPage({
   const [assignSelected, setAssignSelected] = useState(DEFAULT_GROUP_ID)
   const [assigning, setAssigning] = useState(false)
   const [assignError, setAssignError] = useState('')
+  const [assignQuery, setAssignQuery] = useState('')
   const [createGroupOpen, setCreateGroupOpen] = useState(false)
   const [createGroupName, setCreateGroupName] = useState('')
   const [creatingGroup, setCreatingGroup] = useState(false)
@@ -827,6 +836,39 @@ export default function SkillsPage({
   }, [groups, skills, query, selectedCategory, selectedToolFilter, selectedStatusFilter])
 
   const sortedGroups = useMemo(() => sortGroupsForDisplay(groups), [groups])
+  const assignSkillCounts = useMemo(() => countSkillsByGroup(skills), [skills])
+  const assignFilteredGroups = useMemo(
+    () => filterGroupsByQuery(sortedGroups, assignQuery, groupDisplayName),
+    [sortedGroups, assignQuery],
+  )
+  const assignMoves = useMemo(
+    () => countBatchMoves(selectedIds, skills, assignSelected),
+    [selectedIds, skills, assignSelected],
+  )
+  const assignCurrentGroup = assignSkill?.group || DEFAULT_GROUP_ID
+  const assignDirty = assignBatch
+    ? assignMoves.move > 0
+    : assignSelected !== assignCurrentGroup
+  const assignAvatarTheme = assignSkill
+    ? getSkillAvatarTheme(assignSkill.name || assignSkill.id)
+    : null
+  const assignDeltaText = formatAssignDelta({
+    batch: assignBatch,
+    fromId: assignCurrentGroup,
+    toId: assignSelected,
+    moveCount: assignMoves.move,
+    displayName: groupDisplayName,
+  })
+
+  useEffect(() => {
+    if (!assignOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>('.assign-group-tile.is-selected')
+        ?.scrollIntoView({block: 'nearest'})
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [assignOpen])
 
   function clearLongPressTimer() {
     if (longPressTimer.current != null) {
@@ -1563,6 +1605,7 @@ export default function SkillsPage({
     setAssignSkill(skill)
     setAssignSelected(skill.group || DEFAULT_GROUP_ID)
     setAssignError('')
+    setAssignQuery('')
     setAssignOpen(true)
   }
 
@@ -1582,6 +1625,7 @@ export default function SkillsPage({
     setAssignSkill(null)
     setAssignSelected(preselected)
     setAssignError('')
+    setAssignQuery('')
     setAssignOpen(true)
   }
 
@@ -1591,6 +1635,7 @@ export default function SkillsPage({
     setAssignSkill(null)
     setAssignBatch(false)
     setAssignError('')
+    setAssignQuery('')
   }
 
   async function handleAssignGroup() {
@@ -3066,55 +3111,235 @@ export default function SkillsPage({
       ) : null}
 
       {assignOpen && (assignSkill || assignBatch) ? (
-        <div
-          className="dialog-backdrop"
-          role="presentation"
-        >
+        <div className="dialog-backdrop" role="presentation">
           <div
-            className="dialog"
+            className="dialog dialog-assign-group"
             role="dialog"
+            aria-modal="true"
             aria-labelledby="assign-group-title"
+            aria-describedby="assign-group-desc"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="assign-group-title">{assignBatch ? '批量分组' : '设置分组'}</h2>
-            <p className="muted">
-              {assignBatch
-                ? `将已选 ${selectedIds.size} 个技能移动到目标分组；已在该分组中的会跳过。`
-                : `技能：${assignSkill?.name || assignSkill?.id}`}
-            </p>
-            <div className="enable-tool-list">
-              {sortedGroups.map((g) => (
-                <label key={g.id} className="check-field enable-tool-item">
-                  <input
-                    type="radio"
-                    name="assign-group"
-                    checked={assignSelected === g.id}
-                    disabled={assigning}
-                    onChange={() => setAssignSelected(g.id)}
-                  />
-                  <span>{groupDisplayName(g.id)}</span>
-                </label>
-              ))}
-            </div>
-            {assignError ? <div className="dialog-error">{assignError}</div> : null}
-            <div className="dialog-actions">
+            <header className="assign-group-head">
+              <div className="assign-group-head-main">
+                {assignBatch ? (
+                  <div className="assign-batch-mark" aria-hidden="true">
+                    {selectedIds.size}
+                  </div>
+                ) : assignAvatarTheme ? (
+                  <div
+                    className="skill-avatar assign-group-avatar"
+                    style={{
+                      background: assignAvatarTheme.bg,
+                      borderColor: assignAvatarTheme.border,
+                      color: assignAvatarTheme.text,
+                    }}
+                    aria-hidden="true"
+                  >
+                    <span>{assignAvatarTheme.char}</span>
+                  </div>
+                ) : null}
+                <div className="assign-group-head-text">
+                  <h2 id="assign-group-title">{assignBatch ? '批量分组' : '设置分组'}</h2>
+                  <p id="assign-group-desc" className="assign-group-desc">
+                    {assignBatch ? (
+                      <>已选 {selectedIds.size} 个技能 · 已在目标分组中的会跳过</>
+                    ) : (
+                      <>
+                        <span className="assign-group-skill">
+                          {assignSkill?.name || assignSkill?.id}
+                        </span>
+                        <span aria-hidden="true"> · </span>
+                        当前在「{groupDisplayName(assignCurrentGroup)}」
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                className="btn"
+                className="btn btn-icon assign-group-close"
+                aria-label="关闭"
                 disabled={assigning}
                 onClick={closeAssignGroupDialog}
               >
-                取消
+                <IconX size={16} />
               </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={assigning || groups.length === 0}
-                onClick={() => void handleAssignGroup()}
-              >
-                {assigning ? '保存中…' : '确认'}
-              </button>
+            </header>
+
+            <div className="assign-group-body">
+              {sortedGroups.length === 0 ? (
+                <div className="assign-group-empty">
+                  <IconFolderOpen size={22} />
+                  <p className="assign-group-empty-title">暂无分组</p>
+                  <p className="muted">请先在技能页新增一个分组</p>
+                </div>
+              ) : (
+                <>
+                  <div className="assign-group-toolbar">
+                    <div className="assign-group-search">
+                      <IconSearch size={14} className="search-icon" />
+                      <input
+                        type="search"
+                        value={assignQuery}
+                        onChange={(e) => setAssignQuery(e.target.value)}
+                        placeholder="筛选分组…"
+                        aria-label="筛选分组"
+                        disabled={assigning}
+                      />
+                      {assignQuery ? (
+                        <button
+                          type="button"
+                          className="search-clear-btn"
+                          onClick={() => setAssignQuery('')}
+                          aria-label="清空筛选"
+                          title="清空筛选"
+                        >
+                          <IconX size={12} />
+                        </button>
+                      ) : null}
+                    </div>
+                    <span className="assign-group-count">
+                      {assignQuery.trim()
+                        ? `${assignFilteredGroups.length} / ${sortedGroups.length}`
+                        : `${sortedGroups.length} 个分组`}
+                    </span>
+                  </div>
+
+                  {assignFilteredGroups.length === 0 ? (
+                    <div className="assign-group-empty">
+                      <IconSearch size={22} />
+                      <p className="assign-group-empty-title">没有匹配的分组</p>
+                      <p className="muted">试试别的关键词，或清空筛选</p>
+                    </div>
+                  ) : (
+                    <div className="assign-group-grid" role="radiogroup" aria-label="选择分组">
+                      {assignFilteredGroups.map((g) => {
+                        const selected = assignSelected === g.id
+                        const overlap = assignBatch
+                          ? batchGroupOverlap(selectedIds, skills, g.id)
+                          : g.id === assignCurrentGroup
+                            ? 'all'
+                            : 'none'
+                        const count = assignSkillCounts[g.id] ?? 0
+                        const theme = getSkillAvatarTheme(groupDisplayName(g.id))
+                        const tileClass = [
+                          'assign-group-tile',
+                          selected ? 'is-selected' : '',
+                          overlap === 'all' ? 'is-current' : '',
+                          overlap === 'some' ? 'is-partial' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')
+                        return (
+                          <label
+                            key={g.id}
+                            className={tileClass}
+                            title={groupDisplayName(g.id)}
+                          >
+                            <input
+                              type="radio"
+                              name="assign-group"
+                              value={g.id}
+                              checked={selected}
+                              disabled={assigning}
+                              aria-label={`${groupDisplayName(g.id)}，${count} 个技能${
+                                overlap === 'all'
+                                  ? '，当前分组'
+                                  : overlap === 'some'
+                                    ? '，部分所选技能在此'
+                                    : ''
+                              }`}
+                              onChange={() => setAssignSelected(g.id)}
+                            />
+                            <span
+                              className="assign-group-mark"
+                              style={{
+                                background: theme.bg,
+                                borderColor: theme.border,
+                                color: theme.text,
+                              }}
+                              aria-hidden="true"
+                            >
+                              {theme.char}
+                            </span>
+                            <span className="assign-group-copy">
+                              <span className="assign-group-name">
+                                {groupDisplayName(g.id)}
+                              </span>
+                              <span className="assign-group-meta">
+                                <span className="assign-group-meta-count">
+                                  {count} 个技能
+                                </span>
+                                {overlap === 'all' ? (
+                                  <span className="assign-group-tag">当前</span>
+                                ) : overlap === 'some' ? (
+                                  <span className="assign-group-tag">部分</span>
+                                ) : null}
+                              </span>
+                            </span>
+                            <span className="assign-group-tick" aria-hidden="true">
+                              <IconCheck size={12} />
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
+
+            {assignError ? (
+              <div className="dialog-error assign-group-error">{assignError}</div>
+            ) : null}
+
+            <footer className="assign-group-foot">
+              {assignBatch ? (
+                <p
+                  className={assignDirty ? 'assign-group-delta is-dirty' : 'assign-group-delta'}
+                  role="status"
+                >
+                  {assignDeltaText}
+                </p>
+              ) : (
+                <div
+                  className="assign-group-trail"
+                  role="status"
+                  aria-label={assignDeltaText}
+                >
+                  <span className={assignDirty ? 'assign-group-chip' : 'assign-group-chip is-same'}>
+                    {groupDisplayName(assignCurrentGroup)}
+                  </span>
+                  <IconArrowRight size={14} className="assign-group-trail-arrow" />
+                  <span
+                    className={
+                      assignDirty ? 'assign-group-chip is-target' : 'assign-group-chip is-same'
+                    }
+                  >
+                    {groupDisplayName(assignSelected)}
+                  </span>
+                </div>
+              )}
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={assigning}
+                  onClick={closeAssignGroupDialog}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={assigning || groups.length === 0 || !assignDirty}
+                  onClick={() => void handleAssignGroup()}
+                >
+                  {assigning ? '移动中…' : '移动'}
+                </button>
+              </div>
+            </footer>
           </div>
         </div>
       ) : null}
