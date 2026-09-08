@@ -218,7 +218,7 @@ export default function OrganizePage({onBack}: Props) {
   const refreshGate = useCallback(async () => {
     if (!plan) {
       setCanExecute(false)
-      setBlockReason('请先生成整理预览')
+      setBlockReason('请先扫描工作目录或深度扫描')
       return
     }
     try {
@@ -315,7 +315,7 @@ export default function OrganizePage({onBack}: Props) {
     }
   }
 
-  async function handlePreview() {
+  async function loadPreview(opts?: {toastMessage?: string; keepDeepScan?: boolean}) {
     const seq = ++previewSeqRef.current
     setLoadingPreview(true)
     setError('')
@@ -324,14 +324,16 @@ export default function OrganizePage({onBack}: Props) {
     setDialogError('')
     setActionQuery('')
     try {
-      const next = await PreviewOrganize()
+      const next = await PreviewOrganize(Boolean(opts?.keepDeepScan))
       if (seq !== previewSeqRef.current) return
       const conflicts = next.conflicts ?? []
       resetActionGroupCollapse()
       applyPlan(next, {clearReport: true, openConflict: conflicts.length > 0})
       setActiveConflictId(conflicts[0]?.skillId ?? null)
       showToast({
-        message: `整理预览就绪：${(next.actions ?? []).length} 项动作${conflicts.length ? `，${conflicts.length} 项冲突` : ''}`,
+        message:
+          opts?.toastMessage ??
+          `扫描完成：${(next.actions ?? []).length} 项动作${conflicts.length ? `，${conflicts.length} 项冲突` : ''}`,
         tone: 'success',
       })
     } catch (e) {
@@ -340,6 +342,10 @@ export default function OrganizePage({onBack}: Props) {
     } finally {
       if (seq === previewSeqRef.current) setLoadingPreview(false)
     }
+  }
+
+  async function handlePreview() {
+    await loadPreview()
   }
 
   async function commitPlanActions(actions: OrganizeAction[]) {
@@ -454,7 +460,7 @@ export default function OrganizePage({onBack}: Props) {
         setWorkdirSelected(new Set())
       }
       try {
-        const next = await PreviewOrganize()
+        const next = await PreviewOrganize(true)
         resetActionGroupCollapse()
         applyPlan(next)
         const conflicts = next.conflicts ?? []
@@ -515,9 +521,15 @@ export default function OrganizePage({onBack}: Props) {
     setError('')
     try {
       const extras = await DeepScanSkills()
-      showToast({
-        message: `深度扫描完成，发现 ${(extras ?? []).length} 个额外技能，请重新生成预览`,
-        tone: 'info',
+      const extraCount = extras?.length ?? 0
+      setDeepScanning(false)
+      setDeepProgress('')
+      await loadPreview({
+        keepDeepScan: true,
+        toastMessage:
+          extraCount > 0
+            ? `全盘扫描完成，发现 ${extraCount} 个额外技能，已进入预览`
+            : '全盘扫描完成，已进入预览',
       })
     } catch (e) {
       setError(errMsg(e))
@@ -738,7 +750,8 @@ export default function OrganizePage({onBack}: Props) {
           </div>
         </div>
 
-        <div className="organize-header-right">
+        {restoreOrphansAvailable || report || plan ? (
+          <div className="organize-header-right">
           {restoreOrphansAvailable ? (
             <button
               type="button"
@@ -764,27 +777,29 @@ export default function OrganizePage({onBack}: Props) {
             </button>
           ) : null}
 
-          <button
-            type="button"
-            className="btn"
-            disabled={deepScanning}
-            onClick={() => (deepScanning ? handleCancelDeepScan() : void handleDeepScan())}
-            title="深度扫描整个磁盘或工作区查找未登记的技能"
-          >
-            <IconSearch size={15} />
-            <span>{deepScanning ? '取消扫描' : '深度扫描'}</span>
-          </button>
+          {plan ? (
+            <button
+              type="button"
+              className="btn"
+              disabled={loadingPreview && !deepScanning}
+              onClick={() => (deepScanning ? handleCancelDeepScan() : void handleDeepScan())}
+              title="重新扫描整个用户主目录，完成后刷新预览"
+            >
+              <IconSearch size={15} />
+              <span>{deepScanning ? '取消扫描' : '深度扫描'}</span>
+            </button>
+          ) : null}
 
           {plan ? (
             <button
               type="button"
               className="btn"
-              disabled={loadingPreview || executing}
+              disabled={loadingPreview || executing || deepScanning}
               onClick={() => void handlePreview()}
-              title="重新扫描各工具目录生成最新预览"
+              title="重新扫描设置中已配置的工作目录，并刷新预览"
             >
               <IconRefresh size={15} className={loadingPreview ? 'is-spinning' : ''} />
-              <span>重新预览</span>
+              <span>{loadingPreview && !deepScanning ? '正在扫描…' : '扫描工作目录'}</span>
             </button>
           ) : null}
 
@@ -800,31 +815,29 @@ export default function OrganizePage({onBack}: Props) {
             </button>
           ) : null}
 
-          <button
-            type="button"
-            className="btn btn-primary btn-execute"
-            data-tour={!plan ? 'demo-preview' : 'demo-execute'}
-            disabled={!plan ? loadingPreview : !canExecute || executing || loadingPreview}
-            onClick={() => (!plan ? void handlePreview() : void handleExecute())}
-          >
-            {!plan ? (
-              <>
-                <IconFolderSync size={16} className={loadingPreview ? 'is-spinning' : ''} />
-                <span>{loadingPreview ? '正在扫描…' : '生成整理预览'}</span>
-              </>
-            ) : executing ? (
-              <>
-                <IconRefresh size={16} className="is-spinning" />
-                <span>正在执行…</span>
-              </>
-            ) : (
-              <>
-                <IconCheck size={16} />
-                <span>开始执行整理</span>
-              </>
-            )}
-          </button>
-        </div>
+          {plan ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-execute"
+              data-tour="demo-execute"
+              disabled={!canExecute || executing || loadingPreview}
+              onClick={() => void handleExecute()}
+            >
+              {executing ? (
+                <>
+                  <IconRefresh size={16} className="is-spinning" />
+                  <span>正在执行…</span>
+                </>
+              ) : (
+                <>
+                  <IconCheck size={16} />
+                  <span>开始执行整理</span>
+                </>
+              )}
+            </button>
+          ) : null}
+          </div>
+        ) : null}
       </header>
 
       {/* 3步工作流指示器 */}
@@ -841,16 +854,20 @@ export default function OrganizePage({onBack}: Props) {
               className="organize-step-desc"
               title={
                 !plan
-                  ? loadingPreview
-                    ? '正在扫描所有工具目录…'
-                    : '检测散落技能与失效链接'
+                  ? deepScanning
+                    ? '正在全盘扫描用户主目录…'
+                    : loadingPreview
+                      ? '正在扫描已配置的工作目录…'
+                      : '扫描工作目录或全盘查找散落技能'
                   : `已发现 ${actions.length} 项动作，${conflicts.length} 处冲突`
               }
             >
               {!plan
-                ? loadingPreview
-                  ? '正在扫描所有工具目录…'
-                  : '检测散落技能与失效链接'
+                ? deepScanning
+                  ? '正在全盘扫描用户主目录…'
+                  : loadingPreview
+                    ? '正在扫描已配置的工作目录…'
+                    : '扫描工作目录或全盘查找散落技能'
                 : `已发现 ${actions.length} 项动作，${conflicts.length} 处冲突`}
             </span>
           </div>
@@ -1041,24 +1058,32 @@ export default function OrganizePage({onBack}: Props) {
           </div>
 
           <div className="organize-hero-actions">
-            <button
-              type="button"
-              className="btn btn-primary btn-hero-primary"
-              disabled={loadingPreview}
-              onClick={() => void handlePreview()}
-            >
-              <IconFolderSync size={16} className={loadingPreview ? 'is-spinning' : ''} />
-              <span>{loadingPreview ? '正在扫描生成中…' : '立即开始扫描并生成预览'}</span>
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={deepScanning}
-              onClick={() => void handleDeepScan()}
-            >
-              <IconSearch size={16} />
-              <span>全盘深度扫描</span>
-            </button>
+            <div className="organize-hero-actions-row">
+              <button
+                type="button"
+                className="btn btn-primary btn-hero-primary"
+                data-tour="demo-preview"
+                disabled={loadingPreview || deepScanning}
+                onClick={() => void handlePreview()}
+                title="扫描设置中已配置的工具工作目录，完成后进入预览"
+              >
+                <IconFolderSync size={16} className={loadingPreview && !deepScanning ? 'is-spinning' : ''} />
+                <span>{loadingPreview && !deepScanning ? '正在扫描…' : '扫描工作目录'}</span>
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={loadingPreview && !deepScanning}
+                onClick={() => (deepScanning ? handleCancelDeepScan() : void handleDeepScan())}
+                title="扫描整个用户主目录查找未登记技能，完成后进入预览"
+              >
+                <IconSearch size={16} className={deepScanning ? 'is-spinning' : ''} />
+                <span>{deepScanning ? '取消扫描' : '深度扫描'}</span>
+              </button>
+            </div>
+            <p className="organize-hero-scan-hint">
+              两个按钮都会重新扫描对应范围，完成后进入预览。工作目录是设置里已添加的工具目录；深度扫描覆盖整个用户主目录。
+            </p>
           </div>
         </section>
       ) : (

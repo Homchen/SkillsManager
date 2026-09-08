@@ -190,7 +190,7 @@ func TestSessionPreviewMergesDeepScanFindings(t *testing.T) {
 		},
 	}}
 
-	plan, err := s.Preview(cfg)
+	plan, err := s.Preview(cfg, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,6 +200,46 @@ func TestSessionPreviewMergesDeepScanFindings(t *testing.T) {
 	}
 	if !ids["managed"] || !ids["orphan-skill"] {
 		t.Fatalf("actions=%+v want managed + orphan-skill", plan.Actions)
+	}
+}
+
+func TestSessionWorkdirPreviewDiscardsDeepScanFindings(t *testing.T) {
+	root := t.TempDir()
+	hub := filepath.Join(root, "hub")
+	writeSkillDir(t, filepath.Join(hub, domain.DefaultGroup, "managed"), "managed")
+	orphan := filepath.Join(root, "home", "orphan-skill")
+	writeSkillDir(t, orphan, "orphan")
+
+	cfg := config.Config{
+		HubPath: hub,
+		Tools: []config.ToolMapping{
+			{ID: "skills", Path: hub, Enabled: true, IsHub: true},
+		},
+	}
+	s := NewSession()
+	s.extras = []domain.SkillEntry{{
+		ID: "orphan-skill",
+		Locations: []domain.SkillLocation{
+			{ToolID: "orphan", Path: orphan, Kind: domain.KindRealCopy},
+		},
+	}}
+
+	plan, err := s.Preview(cfg, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, a := range plan.Actions {
+		ids[a.SkillID] = true
+	}
+	if !ids["managed"] {
+		t.Fatalf("actions=%+v want managed", plan.Actions)
+	}
+	if ids["orphan-skill"] {
+		t.Fatalf("workdir preview must not keep deep-scan extras, actions=%+v", plan.Actions)
+	}
+	if len(s.extras) != 0 {
+		t.Fatalf("extras=%+v want empty after workdir preview", s.extras)
 	}
 }
 
@@ -214,7 +254,7 @@ func TestSessionRestoreRequiresPreview(t *testing.T) {
 func TestSessionCanExecuteRequiresPreview(t *testing.T) {
 	s := NewSession()
 	_, err := s.CheckExecute()
-	if err == nil || !strings.Contains(err.Error(), "请先生成整理预览") {
+	if err == nil || !strings.Contains(err.Error(), "请先扫描工作目录或深度扫描") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -324,7 +364,7 @@ func TestNestedSkillMultiRoundMergeWritesOneHubDir(t *testing.T) {
 	cfg := config.Config{HubPath: hub, Tools: tools}
 
 	s := NewSession()
-	plan, err := s.Preview(cfg)
+	plan, err := s.Preview(cfg, false)
 	if err != nil {
 		t.Fatal(err)
 	}

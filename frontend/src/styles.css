@@ -3755,6 +3755,13 @@ body.is-marquee-selecting * {
 
 .organize-hero-actions {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.organize-hero-actions-row {
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
@@ -3778,6 +3785,15 @@ body.is-marquee-selecting * {
 .organize-hero-actions .btn svg {
   display: block;
   flex-shrink: 0;
+}
+
+.organize-hero-scan-hint {
+  margin: 0;
+  max-width: 36em;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+  text-align: center;
 }
 
 .btn-hero-primary {
@@ -10938,7 +10954,11 @@ body.is-marquee-selecting * {
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
 }
 
-.onboarding-demo-organize {
+.onboarding-demo-organize,
+.onboarding-demo-settings,
+.onboarding-demo-editor,
+.onboarding-demo-usage,
+.onboarding-demo-skills {
   top: var(--nav-h);
   left: 0;
   right: 0;
@@ -10956,6 +10976,23 @@ body.is-marquee-selecting * {
   z-index: 0;
 }
 
+.onboarding-demo-editor {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: auto;
+}
+
+.onboarding-demo-editor.editor-page {
+  height: 100%;
+}
+
+.onboarding-demo-usage {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .onboarding-demo-bulk {
   inset: 0;
   border: none;
@@ -10966,20 +11003,6 @@ body.is-marquee-selecting * {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.onboarding-demo-grouped {
-  top: var(--nav-h);
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 16px;
-  overflow: auto;
-  background: var(--bg);
-  scrollbar-gutter: stable;
 }
 
 .onboarding-card {

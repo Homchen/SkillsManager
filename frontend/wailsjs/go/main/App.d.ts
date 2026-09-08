@@ -73,7 +73,7 @@ export function OpenFolder(arg1:string):Promise<void>;
 
 export function OpenLogsFolder():Promise<void>;
 
-export function PreviewOrganize():Promise<domain.OrganizePlan>;
+export function PreviewOrganize(arg1:boolean):Promise<domain.OrganizePlan>;
 
 export function PreviewRestoreOrphanLinks():Promise<Array<domain.RestoreOrphanItem>>;
 

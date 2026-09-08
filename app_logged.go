@@ -316,8 +316,10 @@ func (a *App) EnableSkillLinks(toolIDs []string, mode string) (domain.BulkLinkRe
 	}, "tools", len(toolIDs), "mode", mode)
 }
 
-func (a *App) PreviewOrganize() (domain.OrganizePlan, error) {
-	return applog.OpValue("PreviewOrganize", a.inner.PreviewOrganize)
+func (a *App) PreviewOrganize(keepDeepScan bool) (domain.OrganizePlan, error) {
+	return applog.OpValue("PreviewOrganize", func() (domain.OrganizePlan, error) {
+		return a.inner.PreviewOrganize(keepDeepScan)
+	}, "keepDeepScan", keepDeepScan)
 }
 
 func (a *App) UpdateOrganizePlan(plan domain.OrganizePlan) error {

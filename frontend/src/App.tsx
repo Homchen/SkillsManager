@@ -345,6 +345,7 @@ function App() {
                 aria-current={active ? 'page' : undefined}
                 className={active ? 'app-nav-tab is-active' : 'app-nav-tab'}
                 title={item.label}
+                data-tour={`nav-${item.id}`}
                 onClick={() => void goTo(item.id)}
               >
                 <item.Icon size={15} />

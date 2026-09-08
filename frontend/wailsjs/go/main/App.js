@@ -142,8 +142,8 @@ export function OpenLogsFolder() {
   return window['go']['main']['App']['OpenLogsFolder']();
 }
 
-export function PreviewOrganize() {
-  return window['go']['main']['App']['PreviewOrganize']();
+export function PreviewOrganize(arg1) {
+  return window['go']['main']['App']['PreviewOrganize'](arg1);
 }
 
 export function PreviewRestoreOrphanLinks() {

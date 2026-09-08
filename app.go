@@ -1173,8 +1173,9 @@ func (a *appCore) EnableSkillLinks(toolIDs []string, mode string) (domain.BulkLi
 }
 
 // PreviewOrganize builds and stores an organize plan for the current session.
-func (a *appCore) PreviewOrganize() (domain.OrganizePlan, error) {
-	plan, err := a.session().Preview(a.cfg)
+// keepDeepScan=false is a workdir rescan and discards prior full-disk findings.
+func (a *appCore) PreviewOrganize(keepDeepScan bool) (domain.OrganizePlan, error) {
+	plan, err := a.session().Preview(a.cfg, keepDeepScan)
 	return plan, userErr(err)
 }
 

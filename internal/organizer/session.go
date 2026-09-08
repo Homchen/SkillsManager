@@ -33,18 +33,23 @@ func NewSession() *Session {
 
 func (s *Session) requirePlanLocked() (*domain.OrganizePlan, error) {
 	if s.plan == nil {
-		return nil, errors.New("请先生成整理预览")
+		return nil, errors.New("请先扫描工作目录或深度扫描")
 	}
 	return s.plan, nil
 }
 
-// Preview scans configured roots, merges cached deep-scan findings, and stores the plan.
-func (s *Session) Preview(cfg config.Config) (domain.OrganizePlan, error) {
+// Preview scans configured roots and stores the plan.
+// If keepDeepScan is false, previous full-disk findings are discarded so a
+// workdir rescan is not polluted by a prior deep scan.
+func (s *Session) Preview(cfg config.Config, keepDeepScan bool) (domain.OrganizePlan, error) {
 	base, err := scanner.Scan(cfg)
 	if err != nil {
 		return domain.OrganizePlan{}, err
 	}
 	s.mu.Lock()
+	if !keepDeepScan {
+		s.extras = nil
+	}
 	entries := mergeSkillEntries(base, s.extras)
 	s.mu.Unlock()
 

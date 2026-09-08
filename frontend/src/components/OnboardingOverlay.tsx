@@ -1,11 +1,12 @@
 import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {placeCallout, type Rect} from '../onboarding/placeCallout'
-import {DemoBulk, DemoGrouped, DemoOrganize} from '../onboarding/panels'
+import {DemoBulk, DemoEditor, DemoOrganize, DemoSettings, DemoSkills, DemoUsage} from '../onboarding/panels'
 import {
   nextOnboardingStep,
   onboardingCalloutPrefer,
   onboardingCopy,
   onboardingDemo,
+  onboardingStepProgress,
   onboardingTarget,
   type OnboardingStep,
 } from '../onboarding/steps'
@@ -37,6 +38,7 @@ export default function OnboardingOverlay({onFinish}: Props) {
   const copy = onboardingCopy(step)
   const demo = onboardingDemo(step)
   const target = onboardingTarget(step)
+  const progress = onboardingStepProgress(step)
 
   const syncLayout = useCallback(() => {
     const nextHole = target ? measureTarget(target) : null
@@ -53,14 +55,25 @@ export default function OnboardingOverlay({onFinish}: Props) {
       })
       return
     }
-    setCardPos(
-      placeCallout(nextHole, cardSize, viewport, 12, onboardingCalloutPrefer(step)),
-    )
+    setCardPos(placeCallout(nextHole, cardSize, viewport, 12, onboardingCalloutPrefer(step)))
   }, [target, step])
 
   useLayoutEffect(() => {
     syncLayout()
-  }, [syncLayout, step, demo.organize, demo.previewFilled, demo.executed, demo.report, demo.bulk, demo.grouped])
+  }, [
+    syncLayout,
+    step,
+    demo.organize,
+    demo.previewFilled,
+    demo.executed,
+    demo.report,
+    demo.bulk,
+    demo.settings,
+    demo.settingsTab,
+    demo.editor,
+    demo.usage,
+    demo.skillsList,
+  ])
 
   useEffect(() => {
     const onResize = () => syncLayout()
@@ -97,15 +110,14 @@ export default function OnboardingOverlay({onFinish}: Props) {
 
   return (
     <div className="onboarding-root" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+      {demo.settings ? <DemoSettings tab={demo.settingsTab} /> : null}
       {demo.organize ? (
-        <DemoOrganize
-          previewFilled={demo.previewFilled}
-          executed={demo.executed}
-          report={demo.report}
-        />
+        <DemoOrganize previewFilled={demo.previewFilled} executed={demo.executed} report={demo.report} />
       ) : null}
       {demo.bulk ? <DemoBulk step={demo.bulkStep} /> : null}
-      {demo.grouped ? <DemoGrouped /> : null}
+      {demo.editor ? <DemoEditor /> : null}
+      {demo.usage ? <DemoUsage /> : null}
+      {demo.skillsList ? <DemoSkills /> : null}
 
       <div
         className={hole ? 'onboarding-catcher has-spot' : 'onboarding-catcher'}
@@ -138,12 +150,10 @@ export default function OnboardingOverlay({onFinish}: Props) {
         />
       ) : null}
 
-      <div
-        ref={cardRef}
-        className="onboarding-card"
-        style={{top: cardPos.top, left: cardPos.left}}
-      >
-        <p className="onboarding-kicker">新手引导</p>
+      <div ref={cardRef} className="onboarding-card" style={{top: cardPos.top, left: cardPos.left}}>
+        <p className="onboarding-kicker">
+          新手引导 · {progress.current} / {progress.total}
+        </p>
         <h2 id="onboarding-title">{copy.title}</h2>
         <p>{copy.body}</p>
         <div className="onboarding-card-actions">
@@ -153,11 +163,7 @@ export default function OnboardingOverlay({onFinish}: Props) {
             </button>
           ) : null}
           {copy.primary ? (
-            <button
-              type="button"
-              className="btn btn-primary onboarding-card-primary"
-              onClick={advance}
-            >
+            <button type="button" className="btn btn-primary onboarding-card-primary" onClick={advance}>
               {copy.primary}
             </button>
           ) : null}
