@@ -1865,6 +1865,7 @@ export default function SkillsPage({
       : selectedIds.has(skill.id)
     const cardClass = [
       'skill-card',
+      menuOpen ? 'is-menu-open' : '',
       selectMode ? 'is-selecting' : '',
       isSelected ? 'is-selected' : '',
       skill.status !== 'normal' ? `has-issue status-${skill.status}` : '',

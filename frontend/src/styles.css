@@ -1633,9 +1633,16 @@ body.is-marquee-selecting * {
 }
 
 .skill-card:hover {
+  z-index: 2;
   border-color: #93c5fd;
   transform: translateY(-2px);
   box-shadow: 0 10px 24px -4px rgba(15, 23, 42, 0.08), 0 4px 8px -2px rgba(15, 23, 42, 0.03);
+}
+
+/* 菜单挂在卡片内部，必须抬高层叠，否则会被网格中靠后的卡片盖住 */
+.skill-card.is-menu-open,
+.skill-card.is-menu-open:hover {
+  z-index: 30;
 }
 
 .skill-card:focus-visible {
