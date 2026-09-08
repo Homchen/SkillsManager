@@ -2163,8 +2163,13 @@ export default function SkillsPage({
           </div>
         </div>
 
-        <div className="category-pills-bar" role="tablist" aria-label="技能分类导航">
-          <div ref={categoryPillsRef} className="category-pills-scroll">
+        <div className="category-pills-bar">
+          <div
+            ref={categoryPillsRef}
+            className="category-pills-scroll"
+            role="tablist"
+            aria-label="技能分类导航"
+          >
             <button
               type="button"
               role="tab"
@@ -2195,17 +2200,17 @@ export default function SkillsPage({
                 </button>
               )
             })}
-            <button
-              type="button"
-              className="category-pill-add"
-              onClick={openCreateGroupDialog}
-              title="新增分组"
-              aria-label="新增分组"
-            >
-              <IconPlus size={13} />
-              <span>新增分组</span>
-            </button>
           </div>
+          <button
+            type="button"
+            className="category-pill-add"
+            onClick={openCreateGroupDialog}
+            title="新增分组"
+            aria-label="新增分组"
+          >
+            <IconPlus size={13} />
+            <span>新增分组</span>
+          </button>
 
           <div className="category-filters-right">
             {availableToolIds.length > 0 ? (

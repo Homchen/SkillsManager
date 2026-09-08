@@ -453,10 +453,10 @@ body,
 .category-pills-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   margin-top: 6px;
   padding-top: 2px;
+  min-width: 0;
 }
 
 .category-pills-scroll {
@@ -464,6 +464,7 @@ body,
   align-items: center;
   gap: 6px;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
   padding: 2px 0;
