@@ -35,6 +35,8 @@ import {
   IconCheck,
   IconChevron,
   IconCopy,
+  IconDownload,
+  IconFolderOpen,
   IconFolderPlus,
   IconFolderSync,
   IconLayoutGrid,
@@ -3305,59 +3307,129 @@ export default function SkillsPage({
       ) : null}
       {selectMode ? (
         <div className="select-action-bar" role="toolbar" aria-label="多选操作">
-          <span className="select-count">已选 {selectedIds.size} 项</span>
+          <div className="select-bar-stat">
+            <span
+              className={
+                selectedIds.size > 0
+                  ? 'select-bar-badge is-active'
+                  : 'select-bar-badge'
+              }
+            >
+              {selectedIds.size}
+            </span>
+            <span className="select-bar-stat-label">已选</span>
+          </div>
+
           <button
             type="button"
-            className="btn btn-ghost"
-            disabled={batchEnabling || assigning || confirmBusy || exporting || filtered.length === 0}
+            className="select-bar-btn select-bar-btn-ghost"
+            disabled={
+              batchEnabling ||
+              assigning ||
+              confirmBusy ||
+              exporting ||
+              filtered.length === 0
+            }
             onClick={toggleSelectAllFiltered}
+            title={
+              filtered.length > 0 &&
+              filtered.every((s) => selectedIds.has(s.id))
+                ? '取消全选当前列表'
+                : '全选当前过滤列表'
+            }
           >
-            {filtered.length > 0 && filtered.every((s) => selectedIds.has(s.id))
+            {filtered.length > 0 &&
+            filtered.every((s) => selectedIds.has(s.id))
               ? '取消全选'
               : '全选'}
           </button>
-          <div className="select-action-spacer" />
+
+          <div className="select-bar-divider" aria-hidden="true" />
+
           <button
             type="button"
-            className="btn btn-primary"
-            disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
+            className="select-bar-btn select-bar-btn-primary"
+            disabled={
+              batchEnabling ||
+              assigning ||
+              confirmBusy ||
+              exporting ||
+              selectedIds.size === 0
+            }
             onClick={openBatchEnableDialog}
+            title="配置已选技能在各工具中的启用/链接状态"
           >
-            配置工具…
+            <IconWrench size={14} className="select-bar-icon" />
+            <span>配置工具…</span>
           </button>
+
           <button
             type="button"
-            className="btn"
-            disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
+            className="select-bar-btn select-bar-btn-secondary"
+            disabled={
+              batchEnabling ||
+              assigning ||
+              confirmBusy ||
+              exporting ||
+              selectedIds.size === 0
+            }
             onClick={openBatchAssignGroup}
+            title="将已选技能移动至指定分组"
           >
-            移动分组…
+            <IconFolderOpen size={14} className="select-bar-icon" />
+            <span>移动分组…</span>
           </button>
+
           <button
             type="button"
-            className="btn"
-            disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
+            className="select-bar-btn select-bar-btn-secondary"
+            disabled={
+              batchEnabling ||
+              assigning ||
+              confirmBusy ||
+              exporting ||
+              selectedIds.size === 0
+            }
             onClick={exportSelectedSkills}
+            title="导出已选技能为 zip 压缩包"
           >
-            {exporting ? '导出中…' : '批量导出'}
+            <IconDownload size={14} className="select-bar-icon" />
+            <span>{exporting ? '导出中…' : '批量导出'}</span>
           </button>
+
           <button
             type="button"
-            className="btn btn-danger"
-            disabled={batchEnabling || assigning || confirmBusy || exporting || selectedIds.size === 0}
+            className="select-bar-btn select-bar-btn-danger"
+            disabled={
+              batchEnabling ||
+              assigning ||
+              confirmBusy ||
+              exporting ||
+              selectedIds.size === 0
+            }
             onClick={openBatchDeleteDialog}
+            title="将已选技能移至回收站"
           >
-            {confirmBusy && confirmDialog?.kind === 'delete-skills-batch'
-              ? '删除中…'
-              : '批量删除'}
+            <IconTrash size={14} className="select-bar-icon" />
+            <span>
+              {confirmBusy && confirmDialog?.kind === 'delete-skills-batch'
+                ? '删除中…'
+                : '批量删除'}
+            </span>
           </button>
+
+          <div className="select-bar-divider" aria-hidden="true" />
+
           <button
             type="button"
-            className="btn"
+            className="select-bar-btn select-bar-btn-done"
             disabled={batchEnabling || assigning || confirmBusy || exporting}
             onClick={exitSelectMode}
+            title="退出多选模式 (Esc)"
           >
-            完成
+            <IconCheck size={14} className="select-bar-icon" />
+            <span>完成</span>
+            <kbd className="select-bar-kbd">Esc</kbd>
           </button>
         </div>
       ) : null}

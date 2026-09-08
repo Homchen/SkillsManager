@@ -1778,98 +1778,257 @@ body.is-marquee-selecting * {
   border: 1px solid #fed7aa;
 }
 
-/* 底部浮动多选操作条 */
+/* 底部浮动多选操作条（深色磨砂浮岛设计） */
 .select-action-bar {
   position: fixed;
   left: 50%;
   bottom: 24px;
   transform: translateX(-50%);
-  z-index: 40;
+  z-index: 100;
   display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: min(720px, calc(100vw - 32px));
-  padding: 8px 14px;
-  background: rgba(15, 23, 42, 0.92);
+  gap: 6px;
+  width: max-content;
+  max-width: min(860px, calc(100vw - 32px));
+  padding: 6px 8px 6px 12px;
+  background: linear-gradient(180deg, rgba(24, 33, 47, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 9999px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.12);
-  animation: select-bar-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow:
+    0 20px 40px -6px rgba(0, 0, 0, 0.45),
+    0 8px 18px -4px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  animation: select-bar-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
 }
 
 @keyframes select-bar-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(12px);
+    transform: translateX(-50%) translateY(14px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%) translateY(0) scale(1);
   }
 }
 
-.select-action-bar .select-count {
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
-  padding: 0 4px 0 6px;
+/* 已选计数与状态区 */
+.select-bar-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 2px;
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
-.select-action-spacer {
-  flex: 1;
-  min-width: 8px;
-}
-
-.select-action-bar .btn {
-  height: 32px;
-  padding: 0 12px;
-  font-size: 12.5px;
-  font-weight: 500;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+.select-bar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-  transition: all 0.15s ease;
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: all 0.2s ease;
 }
 
-.select-action-bar .btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #ffffff;
+.select-bar-badge.is-active {
+  background: rgba(37, 99, 235, 0.28);
+  color: #93c5fd;
+  border-color: rgba(96, 165, 250, 0.45);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.25);
 }
 
+.select-bar-stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(241, 245, 249, 0.88);
+  letter-spacing: -0.01em;
+}
+
+/* 垂直分隔线 */
+.select-bar-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+/* 浮动栏通用按钮基础规范：严格禁止换行与压缩 */
+.select-bar-btn,
+.select-action-bar .btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 12.5px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  border-radius: 9999px !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  cursor: pointer !important;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  user-select: none !important;
+  text-decoration: none !important;
+  outline: none !important;
+}
+
+.select-bar-btn:active:not(:disabled),
+.select-action-bar .btn:active:not(:disabled) {
+  transform: scale(0.97) !important;
+}
+
+.select-bar-btn:disabled,
+.select-action-bar .btn:disabled {
+  opacity: 0.35 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
+.select-bar-icon {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+/* 全选/取消全选 (Ghost) */
+.select-bar-btn-ghost,
+.select-action-bar .btn-ghost {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #cbd5e1 !important;
+}
+
+.select-bar-btn-ghost:hover:not(:disabled),
+.select-action-bar .btn-ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.24) !important;
+  color: #ffffff !important;
+}
+
+/* 主操作：配置工具 (Primary) */
+.select-bar-btn-primary,
 .select-action-bar .btn-primary {
-  background: #2563eb !important;
-  border-color: #3b82f6 !important;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+  border: 1px solid #3b82f6 !important;
   color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35) !important;
 }
 
+.select-bar-btn-primary:hover:not(:disabled),
 .select-action-bar .btn-primary:hover:not(:disabled) {
-  background: #1d4ed8 !important;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+  border-color: #60a5fa !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.45) !important;
+  transform: translateY(-1px);
 }
 
-.select-action-bar .btn-danger {
-  background: rgba(220, 38, 38, 0.85) !important;
-  border-color: #ef4444 !important;
+/* 次级操作：移动分组、批量导出 (Secondary) */
+.select-bar-btn-secondary {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #f1f5f9 !important;
+}
+
+.select-bar-btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.26) !important;
   color: #ffffff !important;
+  transform: translateY(-1px);
 }
 
+/* 危险操作：批量删除 (Danger) */
+.select-bar-btn-danger,
+.select-action-bar .btn-danger {
+  background: rgba(220, 38, 38, 0.18) !important;
+  border: 1px solid rgba(239, 68, 68, 0.32) !important;
+  color: #fca5a5 !important;
+}
+
+.select-bar-btn-danger:hover:not(:disabled),
 .select-action-bar .btn-danger:hover:not(:disabled) {
   background: #dc2626 !important;
+  border-color: #ef4444 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.45) !important;
+  transform: translateY(-1px);
 }
 
-.select-action-bar .btn-ghost {
-  background: transparent;
-  border-color: transparent;
-  color: #cbd5e1;
+/* 完成操作 (Done) */
+.select-bar-btn-done {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+  padding-right: 8px !important;
 }
 
-.select-action-bar .btn-ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
+.select-bar-btn-done:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24) !important;
+  border-color: rgba(255, 255, 255, 0.32) !important;
+  transform: translateY(-1px);
+}
+
+.select-bar-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  padding: 0 5px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  margin-left: 2px;
+}
+
+/* 兼容可能使用原有类名的场景 */
+.select-action-bar .select-count {
+  display: none;
+}
+.select-action-spacer {
+  display: none;
+}
+
+/* 响应式适配：超窄窗口下允许横向平滑滚动，并保证字绝不折叠 */
+@media (max-width: 720px) {
+  .select-action-bar {
+    max-width: calc(100vw - 20px);
+    overflow-x: auto;
+    scrollbar-width: none;
+    bottom: 16px;
+    padding: 5px 6px 5px 10px;
+    gap: 5px;
+  }
+  .select-action-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .select-bar-btn,
+  .select-action-bar .btn {
+    height: 30px !important;
+    padding: 0 10px !important;
+    font-size: 12px !important;
+    gap: 4px !important;
+  }
+  .select-bar-kbd {
+    display: none;
+  }
 }
 
 .placeholder-page {
