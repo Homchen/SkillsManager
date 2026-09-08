@@ -120,36 +120,53 @@ export function DemoOrganize({
         </div>
         {report || executed || previewFilled ? (
           <div className="organize-header-right">
-          {report || executed ? (
-            <button type="button" className="btn" tabIndex={-1}>
-              <IconActivity size={15} />
-              <span>执行报告</span>
-            </button>
-          ) : null}
-          {previewFilled ? (
-            <button type="button" className="btn" tabIndex={-1}>
-              <IconSearch size={15} />
-              <span>深度扫描</span>
-            </button>
-          ) : null}
-          {previewFilled ? (
-            <button type="button" className="btn" tabIndex={-1}>
-              <IconRefresh size={15} />
-              <span>扫描工作目录</span>
-            </button>
-          ) : null}
-          {previewFilled ? (
-            <button
-              type="button"
-              className="btn btn-primary btn-execute"
-              data-tour="demo-execute"
-              disabled={!canExecute}
-              tabIndex={-1}
-            >
-              <IconCheck size={16} />
-              <span>开始执行整理</span>
-            </button>
-          ) : null}
+            <div className="organize-header-tools" role="group">
+              {report || executed ? (
+                <button
+                  type="button"
+                  className="btn btn-icon"
+                  tabIndex={-1}
+                  title="执行报告"
+                  aria-label="执行报告"
+                >
+                  <IconActivity size={16} />
+                </button>
+              ) : null}
+              {previewFilled ? (
+                <button
+                  type="button"
+                  className="btn btn-icon"
+                  tabIndex={-1}
+                  title="深度扫描"
+                  aria-label="深度扫描"
+                >
+                  <IconSearch size={16} />
+                </button>
+              ) : null}
+              {previewFilled ? (
+                <button
+                  type="button"
+                  className="btn btn-icon"
+                  tabIndex={-1}
+                  title="扫描工作目录"
+                  aria-label="扫描工作目录"
+                >
+                  <IconRefresh size={16} />
+                </button>
+              ) : null}
+            </div>
+            {previewFilled ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-execute organize-header-cta"
+                data-tour="demo-execute"
+                disabled={!canExecute}
+                tabIndex={-1}
+              >
+                <IconCheck size={15} />
+                <span>执行整理</span>
+              </button>
+            ) : null}
           </div>
         ) : null}
       </header>

@@ -752,90 +752,102 @@ export default function OrganizePage({onBack}: Props) {
 
         {restoreOrphansAvailable || report || plan ? (
           <div className="organize-header-right">
-          {restoreOrphansAvailable ? (
-            <button
-              type="button"
-              className="btn"
-              disabled={restoreScanning || restoringOrphans || deepScanning}
-              onClick={() => void handleScanRestoreOrphans()}
-              title="恢复误建的指向源仓的符号链接"
-            >
-              <IconRotateCcw size={15} />
-              <span>{restoreScanning ? '扫描中…' : '恢复误迁链接'}</span>
-            </button>
-          ) : null}
+            <div className="organize-header-tools" role="group" aria-label="扫描与辅助">
+              {restoreOrphansAvailable ? (
+                <button
+                  type="button"
+                  className={`btn btn-icon${restoreScanning ? ' is-busy' : ''}`}
+                  disabled={restoreScanning || restoringOrphans || deepScanning}
+                  onClick={() => void handleScanRestoreOrphans()}
+                  aria-label={restoreScanning ? '正在扫描误迁链接' : '恢复误迁链接'}
+                  title="恢复误迁链接：恢复误建的指向源仓的符号链接"
+                >
+                  <IconRotateCcw size={16} className={restoreScanning ? 'is-spinning' : ''} />
+                </button>
+              ) : null}
 
-          {report ? (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setReportOpen(true)}
-              title="查看最近一次整理的执行报告"
-            >
-              <IconActivity size={15} />
-              <span>执行报告</span>
-            </button>
-          ) : null}
+              {report ? (
+                <button
+                  type="button"
+                  className="btn btn-icon"
+                  onClick={() => setReportOpen(true)}
+                  aria-label="执行报告"
+                  title="执行报告：查看最近一次整理的执行报告"
+                >
+                  <IconActivity size={16} />
+                </button>
+              ) : null}
 
-          {plan ? (
-            <button
-              type="button"
-              className="btn"
-              disabled={loadingPreview && !deepScanning}
-              onClick={() => (deepScanning ? handleCancelDeepScan() : void handleDeepScan())}
-              title="重新扫描整个用户主目录，完成后刷新预览"
-            >
-              <IconSearch size={15} />
-              <span>{deepScanning ? '取消扫描' : '深度扫描'}</span>
-            </button>
-          ) : null}
+              {plan ? (
+                <button
+                  type="button"
+                  className={`btn btn-icon${deepScanning ? ' is-busy' : ''}`}
+                  disabled={loadingPreview && !deepScanning}
+                  onClick={() => (deepScanning ? handleCancelDeepScan() : void handleDeepScan())}
+                  aria-label={deepScanning ? '取消深度扫描' : '深度扫描'}
+                  title={
+                    deepScanning
+                      ? '取消深度扫描'
+                      : '深度扫描：重新扫描整个用户主目录，完成后刷新预览'
+                  }
+                >
+                  <IconSearch size={16} className={deepScanning ? 'is-spinning' : ''} />
+                </button>
+              ) : null}
 
-          {plan ? (
-            <button
-              type="button"
-              className="btn"
-              disabled={loadingPreview || executing || deepScanning}
-              onClick={() => void handlePreview()}
-              title="重新扫描设置中已配置的工作目录，并刷新预览"
-            >
-              <IconRefresh size={15} className={loadingPreview ? 'is-spinning' : ''} />
-              <span>{loadingPreview && !deepScanning ? '正在扫描…' : '扫描工作目录'}</span>
-            </button>
-          ) : null}
+              {plan ? (
+                <button
+                  type="button"
+                  className={`btn btn-icon${loadingPreview && !deepScanning ? ' is-busy' : ''}`}
+                  disabled={loadingPreview || executing || deepScanning}
+                  onClick={() => void handlePreview()}
+                  aria-label={
+                    loadingPreview && !deepScanning ? '正在扫描工作目录' : '扫描工作目录'
+                  }
+                  title="扫描工作目录：重新扫描设置中已配置的工作目录，并刷新预览"
+                >
+                  <IconRefresh
+                    size={16}
+                    className={loadingPreview && !deepScanning ? 'is-spinning' : ''}
+                  />
+                </button>
+              ) : null}
+            </div>
 
-          {plan && attentionConflictCount > 0 ? (
-            <button
-              type="button"
-              className="btn btn-attention"
-              onClick={() => openConflictDialog()}
-              title="存在同名内容冲突，必须先决议才能执行整理"
-            >
-              <IconAlertTriangle size={15} />
-              <span>解决冲突 ({attentionConflictCount})</span>
-            </button>
-          ) : null}
+            {plan && attentionConflictCount > 0 ? (
+              <button
+                type="button"
+                className="btn btn-attention organize-header-cta"
+                onClick={() => openConflictDialog()}
+                title="存在同名内容冲突，必须先决议才能执行整理"
+              >
+                <IconAlertTriangle size={14} />
+                <span>解决冲突</span>
+                <span className="organize-header-count">{attentionConflictCount}</span>
+              </button>
+            ) : null}
 
-          {plan ? (
-            <button
-              type="button"
-              className="btn btn-primary btn-execute"
-              data-tour="demo-execute"
-              disabled={!canExecute || executing || loadingPreview}
-              onClick={() => void handleExecute()}
-            >
-              {executing ? (
-                <>
-                  <IconRefresh size={16} className="is-spinning" />
-                  <span>正在执行…</span>
-                </>
-              ) : (
-                <>
-                  <IconCheck size={16} />
-                  <span>开始执行整理</span>
-                </>
-              )}
-            </button>
-          ) : null}
+            {plan ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-execute organize-header-cta"
+                data-tour="demo-execute"
+                disabled={!canExecute || executing || loadingPreview}
+                onClick={() => void handleExecute()}
+              >
+                {executing ? (
+                  <>
+                    <IconRefresh size={15} className="is-spinning" />
+                    <span>执行中…</span>
+                  </>
+                ) : (
+                  <>
+                    <IconCheck size={15} />
+                    <span>执行整理</span>
+                  </>
+                )}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -986,7 +998,7 @@ export default function OrganizePage({onBack}: Props) {
       {plan && canExecute && allConflictsDecided ? (
         <div className="info-banner">
           <span>
-            冲突已全部决议完成！请点击右上角「开始执行整理」完成向源仓迁入并挂载符号链接。
+            冲突已全部决议完成！请点击右上角「执行整理」完成向源仓迁入并挂载符号链接。
           </span>
         </div>
       ) : null}

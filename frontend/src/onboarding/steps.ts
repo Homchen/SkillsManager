@@ -234,8 +234,8 @@ export function onboardingCopy(step: OnboardingStep): OnboardingCopy {
       }
     case 'execute':
       return {
-        title: '开始执行整理',
-        body: '核对 KPI 和勾选项后点「开始执行整理」。教程不会真正迁移文件。Windows 上真实整理可能需要管理员权限。',
+        title: '执行整理',
+        body: '核对 KPI 和勾选项后点「执行整理」。教程不会真正迁移文件。Windows 上真实整理可能需要管理员权限。',
       }
     case 'report':
       return {
