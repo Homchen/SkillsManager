@@ -28,6 +28,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import {ClipboardSetText, OnFileDrop, OnFileDropOff} from '../../wailsjs/runtime/runtime'
 import {AppToast, useAppToast} from '../components/AppToast'
+import {Select} from '../components/Select'
 import {
   IconAlertTriangle,
   IconBulkToolLinks,
@@ -45,6 +46,7 @@ import {
   IconSearch,
   IconSparkles,
   IconTrash,
+  IconWrench,
   IconX,
 } from '../components/icons'
 import {
@@ -251,12 +253,8 @@ export default function SkillsPage({
   const [createName, setCreateName] = useState('')
   const [createGroup, setCreateGroup] = useState(DEFAULT_GROUP_ID)
   const [createLanguage, setCreateLanguage] = useState('zh-CN')
-  const [createLanguageMenuOpen, setCreateLanguageMenuOpen] = useState(false)
-  const [createGroupMenuOpen, setCreateGroupMenuOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [dialogError, setDialogError] = useState('')
-  const createGroupMenuRef = useRef<HTMLDivElement | null>(null)
-  const createLanguageMenuRef = useRef<HTMLDivElement | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignSkill, setAssignSkill] = useState<SkillEntry | null>(null)
   const [assignBatch, setAssignBatch] = useState(false)
@@ -1492,8 +1490,6 @@ export default function SkillsPage({
     setCreateName('')
     setCreateGroup(initialGroup || selectedCategory || DEFAULT_GROUP_ID)
     setCreateLanguage('zh-CN')
-    setCreateGroupMenuOpen(false)
-    setCreateLanguageMenuOpen(false)
     setDialogError('')
     setCreateOpen(true)
   }
@@ -1501,40 +1497,8 @@ export default function SkillsPage({
   function closeCreateDialog() {
     if (creating) return
     setCreateOpen(false)
-    setCreateGroupMenuOpen(false)
-    setCreateLanguageMenuOpen(false)
     setDialogError('')
   }
-
-  useEffect(() => {
-    if (!createGroupMenuOpen && !createLanguageMenuOpen) return
-    const onDoc = (ev: MouseEvent) => {
-      if (
-        createGroupMenuRef.current &&
-        !createGroupMenuRef.current.contains(ev.target as Node)
-      ) {
-        setCreateGroupMenuOpen(false)
-      }
-      if (
-        createLanguageMenuRef.current &&
-        !createLanguageMenuRef.current.contains(ev.target as Node)
-      ) {
-        setCreateLanguageMenuOpen(false)
-      }
-    }
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') {
-        setCreateGroupMenuOpen(false)
-        setCreateLanguageMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [createGroupMenuOpen, createLanguageMenuOpen])
 
   function openAssignGroup(skill: SkillEntry) {
     setOpenMenuId(null)
@@ -1721,8 +1685,6 @@ export default function SkillsPage({
     try {
       await CreateSkill(id, name, createGroup, createLanguage)
       setCreateOpen(false)
-      setCreateGroupMenuOpen(false)
-      setCreateLanguageMenuOpen(false)
       setDialogError('')
       await load()
       onOpenEditor(id)
@@ -2246,20 +2208,23 @@ export default function SkillsPage({
           <div className="category-filters-right">
             {availableToolIds.length > 0 ? (
               <div className="tool-filter-wrap">
-                <select
-                  className="tool-filter-select"
+                <Select
+                  size="sm"
+                  variant="filter"
                   value={selectedToolFilter}
-                  onChange={(e) => setSelectedToolFilter(e.target.value)}
-                  aria-label="按已接入工具过滤"
+                  onChange={setSelectedToolFilter}
+                  prefixIcon={<IconWrench size={13} />}
+                  options={[
+                    { value: 'all', label: '全部工具' },
+                    ...availableToolIds.map((tid) => ({
+                      value: tid,
+                      label: `已链接：${tid}`,
+                    })),
+                  ]}
+                  ariaLabel="按已接入工具过滤"
                   title="按已接入工具过滤"
-                >
-                  <option value="all">全部工具</option>
-                  {availableToolIds.map((tid) => (
-                    <option key={tid} value={tid}>
-                      已链接：{tid}
-                    </option>
-                  ))}
-                </select>
+                  align="right"
+                />
               </div>
             ) : null}
 
@@ -2880,108 +2845,29 @@ export default function SkillsPage({
             </label>
             <div className="field">
               <span>分组</span>
-              <div className="field-select" ref={createGroupMenuRef}>
-                <button
-                  type="button"
-                  className="field-select-trigger"
-                  disabled={creating}
-                  aria-haspopup="listbox"
-                  aria-expanded={createGroupMenuOpen}
-                  onClick={() => setCreateGroupMenuOpen((v) => !v)}
-                >
-                  {groupDisplayName(createGroup)}
-                </button>
-                {createGroupMenuOpen ? (
-                  <ul className="field-select-menu" role="listbox">
-                    {sortedGroups.map((g) => (
-                      <li key={g.id} role="presentation">
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected={createGroup === g.id}
-                          className={createGroup === g.id ? 'is-active' : undefined}
-                          onClick={() => {
-                            setCreateGroup(g.id)
-                            setCreateGroupMenuOpen(false)
-                          }}
-                        >
-                          {groupDisplayName(g.id)}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
+              <Select
+                value={createGroup}
+                onChange={setCreateGroup}
+                disabled={creating}
+                options={sortedGroups.map((g) => ({
+                  value: g.id,
+                  label: groupDisplayName(g.id),
+                }))}
+                ariaLabel="选择分组"
+              />
             </div>
             <div className="field">
               <span>原版语言</span>
-              <div className="field-select" ref={createLanguageMenuRef}>
-                <button
-                  type="button"
-                  className="field-select-trigger"
-                  disabled={creating}
-                  aria-haspopup="listbox"
-                  aria-expanded={createLanguageMenuOpen}
-                  onClick={() => setCreateLanguageMenuOpen((v) => !v)}
-                >
-                  {languageLabel(createLanguage)}
-                </button>
-                {createLanguageMenuOpen ? (
-                  <ul className="field-select-menu" role="listbox">
-                    {SKILL_LANGUAGES.map((lang) => (
-                      <li key={lang.value} role="presentation">
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected={createLanguage === lang.value}
-                          className={createLanguage === lang.value ? 'is-active' : undefined}
-                          onClick={() => {
-                            setCreateLanguage(lang.value)
-                            setCreateLanguageMenuOpen(false)
-                          }}
-                        >
-                          {lang.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
-            <div className="field">
-              <span>原版语言</span>
-              <div className="field-select" ref={createLanguageMenuRef}>
-                <button
-                  type="button"
-                  className="field-select-trigger"
-                  disabled={creating}
-                  aria-haspopup="listbox"
-                  aria-expanded={createLanguageMenuOpen}
-                  onClick={() => setCreateLanguageMenuOpen((v) => !v)}
-                >
-                  {languageLabel(createLanguage)}
-                </button>
-                {createLanguageMenuOpen ? (
-                  <ul className="field-select-menu" role="listbox">
-                    {SKILL_LANGUAGES.map((lang) => (
-                      <li key={lang.value} role="presentation">
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected={createLanguage === lang.value}
-                          className={createLanguage === lang.value ? 'is-active' : undefined}
-                          onClick={() => {
-                            setCreateLanguage(lang.value)
-                            setCreateLanguageMenuOpen(false)
-                          }}
-                        >
-                          {lang.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
+              <Select
+                value={createLanguage}
+                onChange={setCreateLanguage}
+                disabled={creating}
+                options={SKILL_LANGUAGES.map((lang) => ({
+                  value: lang.value,
+                  label: lang.label,
+                }))}
+                ariaLabel="选择原版语言"
+              />
             </div>
             {dialogError ? <div className="dialog-error">{dialogError}</div> : null}
             <div className="dialog-actions">

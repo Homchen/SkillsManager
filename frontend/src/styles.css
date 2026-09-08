@@ -114,7 +114,7 @@
 .dialog .field input:focus-visible,
 .page-toolbar input[type="search"]:focus-visible,
 .settings-page .field input:focus-visible,
-.field-select-trigger:focus-visible,
+.custom-select-trigger:focus-visible,
 .merge-result-edit:focus-visible,
 .cm-editor:focus-visible,
 .cm-content:focus-visible,
@@ -559,25 +559,369 @@ body,
   position: relative;
 }
 
-.tool-filter-select {
+/* ==========================================================================
+   公共通用 Select 下拉选择器组件
+   ========================================================================== */
+
+.custom-select {
+  position: relative;
+  display: inline-block;
+}
+
+.custom-select-default {
+  display: block;
+  width: 100%;
+}
+
+.custom-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background-color: #ffffff;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease,
+    color 0.16s ease;
+}
+
+.custom-select-trigger:hover:not(:disabled) {
+  border-color: #94a3b8;
+  background-color: #fafbfd;
+}
+
+.custom-select.is-open .custom-select-trigger,
+.custom-select-trigger:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.custom-select.is-disabled,
+.custom-select-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* 尺寸规格：sm (28px - 紧凑过滤条), md (36px - 标准表单/弹窗), lg (40px) */
+.custom-select-sm .custom-select-trigger {
   height: 28px;
-  padding: 0 22px 0 8px;
+  padding: 0 8px 0 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  gap: 6px;
+}
+
+.custom-select-md .custom-select-trigger {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13.5px;
+  border-radius: 7px;
+  gap: 8px;
+}
+
+.custom-select-lg .custom-select-trigger {
+  height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+  border-radius: 8px;
+  gap: 8px;
+}
+
+/* 变体：filter (专用于顶部过滤栏/胶囊条旁的过滤选择器) */
+.custom-select-filter {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.custom-select-filter .custom-select-trigger {
+  height: 28px;
+  padding: 0 8px 0 9px;
   border-radius: 6px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #475569;
   font-size: 12px;
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 6px center;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
-.tool-filter-select:hover {
+.custom-select-filter .custom-select-trigger:hover:not(:disabled) {
   border-color: #94a3b8;
   color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+}
+
+.custom-select-filter.is-open .custom-select-trigger {
+  border-color: var(--accent);
+  color: #0f172a;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* 变体：ghost (无边框轻量按钮模式) */
+.custom-select-ghost .custom-select-trigger {
+  border-color: transparent;
+  background: transparent;
+}
+
+.custom-select-ghost .custom-select-trigger:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* 触发按钮内部布局 */
+.custom-select-trigger-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.custom-select-prefix {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.custom-select-trigger:hover .custom-select-prefix {
+  color: #475569;
+}
+
+.custom-select.is-open .custom-select-prefix {
+  color: var(--accent);
+}
+
+.custom-select-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.custom-select-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  flex-shrink: 0;
+  transition:
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    color 0.16s ease;
+}
+
+.custom-select-arrow.is-expanded {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+/* 弹出菜单面板 */
+.custom-select-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  z-index: 70;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  min-width: 100%;
+  width: max-content;
+  max-width: 320px;
+  max-height: 250px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #ffffff;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 6px -1px rgba(15, 23, 42, 0.07),
+    0 12px 28px -4px rgba(15, 23, 42, 0.15),
+    0 0 0 1px rgba(15, 23, 42, 0.03);
+  animation: custom-select-in 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: top;
+}
+
+.custom-select-menu.align-left {
+  left: 0;
+  right: auto;
+}
+
+.custom-select-menu.align-right {
+  right: 0;
+  left: auto;
+}
+
+/* 针对全宽或表单模式，菜单与触发器等宽 */
+.custom-select-default .custom-select-menu {
+  width: 100%;
+  max-width: 100%;
+}
+
+@keyframes custom-select-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 菜单选项 */
+.custom-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.custom-select-sm .custom-select-option {
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: 5px;
+}
+
+.custom-select-option:hover,
+.custom-select-option.is-focused {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.custom-select-option.is-disabled:hover,
+.custom-select-option.is-disabled.is-focused {
+  background-color: transparent;
+  color: #334155;
+}
+
+.custom-select-option.is-selected {
+  background-color: #eff6ff;
+  color: var(--accent);
+  font-weight: 550;
+}
+
+.custom-select-option.is-selected.is-focused {
+  background-color: #e0ecff;
+  color: var(--accent);
+}
+
+.custom-select-option.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.custom-select-option-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.custom-select-option-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.custom-select-option.is-selected .custom-select-option-icon {
+  color: var(--accent);
+}
+
+.custom-select-option-texts {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.custom-select-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-select-option-desc {
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-select-option-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.custom-select-option-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.custom-select-option-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.custom-select-empty {
+  padding: 14px 12px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.field .custom-select,
+.dialog .field .custom-select {
+  width: 100%;
+}
+
+.custom-select-option-del-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #dc2626;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.custom-select-option-del-btn:hover {
+  background: #fee2e2;
 }
 
 .issue-filter-pill {
@@ -1634,63 +1978,6 @@ body.is-marquee-selecting * {
   min-width: 148px;
 }
 
-.page-toolbar .editor-lang-select .field-select-trigger {
-  width: 100%;
-  padding-right: 32px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  text-align: left;
-}
-
-.page-toolbar .editor-lang-select .field-select-menu button {
-  height: auto;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-}
-
-.editor-lang-select .field-select-menu {
-  right: auto;
-  min-width: 220px;
-  z-index: 40;
-}
-
-.editor-lang-option {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.editor-lang-option > button[role='option'] {
-  flex: 1;
-}
-
-.editor-lang-option > button.danger {
-  flex: 0 0 auto;
-  width: auto;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: #b91c1c;
-  font-size: 13px;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.editor-lang-option > button.danger:hover,
-.editor-lang-option > button.danger:focus-visible {
-  background: #fef2f2;
-  outline: none;
-}
-
-.editor-lang-option > button.danger:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 .editor-layout {
   display: flex;
   flex: 1;
@@ -2302,80 +2589,6 @@ body.is-marquee-selecting * {
 .dialog .field input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-
-.field-select {
-  position: relative;
-}
-
-.field-select-trigger {
-  width: 100%;
-  height: 36px;
-  padding: 0 32px 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 14px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  color: var(--text);
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  outline: none;
-}
-
-.field-select-trigger:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
-}
-
-.field-select-trigger:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.field-select-menu {
-  position: absolute;
-  z-index: 20;
-  left: 0;
-  right: 0;
-  top: calc(100% + 4px);
-  margin: 0;
-  padding: 4px;
-  list-style: none;
-  max-height: 200px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
-}
-
-.field-select-menu button {
-  display: block;
-  width: 100%;
-  border: none;
-  background: transparent;
-  padding: 8px 10px;
-  border-radius: 4px;
-  font-size: 14px;
-  color: var(--text);
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.field-select-menu button:hover {
-  background: var(--bg);
-}
-
-.field-select-menu button.is-active {
-  background: #e8effc;
-  color: var(--accent);
-  font-weight: 600;
 }
 
 .dialog-error {
@@ -6522,9 +6735,9 @@ body.is-marquee-selecting * {
 }
 
 .settings-field-box.is-flashing .settings-text-input,
-.settings-field-box.is-flashing .field-select-trigger,
+.settings-field-box.is-flashing .custom-select-trigger,
 .settings-page .field.is-flashing input,
-.settings-page .field.is-flashing .field-select-trigger {
+.settings-page .field.is-flashing .custom-select-trigger {
   border-color: var(--danger) !important;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent) !important;
 }
@@ -7077,53 +7290,6 @@ body.is-marquee-selecting * {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.45;
-}
-
-.settings-select-button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  height: 38px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 13.5px;
-  cursor: pointer;
-  transition: all 0.18s ease;
-}
-
-.settings-select-button:hover {
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
-  background: #fafbff;
-}
-
-.settings-select-value-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.settings-select-prefix-icon {
-  color: var(--muted);
-  flex-shrink: 0;
-}
-
-.settings-select-arrow {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-right: 2px solid var(--muted);
-  border-bottom: 2px solid var(--muted);
-  transform: rotate(45deg);
-  transition: transform 0.2s ease;
-  margin-right: 4px;
-}
-
-.settings-select-arrow.is-expanded {
-  transform: rotate(-135deg);
 }
 
 /* 输入框与前缀图标 */

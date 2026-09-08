@@ -23,6 +23,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import type {config} from '../../wailsjs/go/models'
 import {AppToast, useAppToast} from '../components/AppToast'
+import {Select} from '../components/Select'
 import {
   IconActivity,
   IconCheck,
@@ -68,7 +69,6 @@ import {
 
 type AppConfig = config.Config
 type ToolMapping = config.ToolMapping
-type TranslationSelect = 'engine' | 'targetLanguage' | null
 
 export type SettingsTabId = 'general' | 'tools' | 'translation' | 'system'
 
@@ -210,8 +210,6 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editingToolIndex, setEditingToolIndex] = useState<number | null>(null)
-  const [openTranslationSelect, setOpenTranslationSelect] = useState<TranslationSelect>(null)
-  const translationSelectRef = useRef<HTMLDivElement | null>(null)
   const [exportingToolId, setExportingToolId] = useState<string | null>(null)
   const [leavePromptOpen, setLeavePromptOpen] = useState(false)
   const leaveResolverRef = useRef<((proceed: boolean) => void) | null>(null)
@@ -234,20 +232,6 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
     message: string
     latencyMs?: number
   } | null>(null)
-
-  useEffect(() => {
-    if (!openTranslationSelect) return
-    const onDoc = (ev: MouseEvent) => {
-      if (
-        translationSelectRef.current &&
-        !translationSelectRef.current.contains(ev.target as Node)
-      ) {
-        setOpenTranslationSelect(null)
-      }
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [openTranslationSelect])
 
   const dirty = useMemo(() => {
     if (!cfg || !savedSnapshot) return false
@@ -1386,7 +1370,7 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
 
           {/* TAB 3: AI 与翻译 */}
           {activeTab === 'translation' ? (
-            <div className="settings-section-container" ref={translationSelectRef}>
+            <div className="settings-section-container">
               {/* 引擎与目标语言配置 */}
               <div className="settings-card">
                 <div className="settings-card-head">
@@ -1447,65 +1431,22 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                   data-settings-field="translationTargetLanguage"
                 >
                   <label className="settings-field-label">目标翻译语言</label>
-                  <div className="field-select">
-                    <button
-                      type="button"
-                      className="field-select-trigger settings-select-button"
-                      aria-haspopup="listbox"
-                      aria-expanded={openTranslationSelect === 'targetLanguage'}
-                      onClick={() =>
-                        setOpenTranslationSelect((cur) =>
-                          cur === 'targetLanguage' ? null : 'targetLanguage',
-                        )
-                      }
-                    >
-                      <div className="settings-select-value-wrap">
-                        <IconLanguages size={15} className="settings-select-prefix-icon" />
-                        <span>
-                          {SKILL_LANGUAGES.find(
-                            (l) => l.value === (cfg.translationTargetLanguage ?? 'zh-CN'),
-                          )?.label ?? (cfg.translationTargetLanguage ?? 'zh-CN')}
-                        </span>
-                      </div>
-                      <span className={`settings-select-arrow ${openTranslationSelect === 'targetLanguage' ? 'is-expanded' : ''}`} aria-hidden="true" />
-                    </button>
-                    {openTranslationSelect === 'targetLanguage' ? (
-                      <ul className="field-select-menu" role="listbox">
-                        {SKILL_LANGUAGES.map((language) => (
-                          <li key={language.value} role="presentation">
-                            <button
-                              type="button"
-                              role="option"
-                              aria-selected={
-                                language.value === (cfg.translationTargetLanguage ?? 'zh-CN')
-                              }
-                              className={
-                                language.value === (cfg.translationTargetLanguage ?? 'zh-CN')
-                                  ? 'is-active'
-                                  : undefined
-                              }
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                setOpenTranslationSelect(null)
-                                setCfg({
-                                  ...cfg,
-                                  translationTargetLanguage: language.value,
-                                } as AppConfig)
-                                setStatus('')
-                              }}
-                            >
-                              <span>{language.label}</span>
-                              {language.value ===
-                              (cfg.translationTargetLanguage ?? 'zh-CN') ? (
-                                <IconCheck size={14} />
-                              ) : null}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
+                  <Select
+                    value={cfg.translationTargetLanguage ?? 'zh-CN'}
+                    onChange={(val) => {
+                      setCfg({
+                        ...cfg,
+                        translationTargetLanguage: val,
+                      } as AppConfig)
+                      setStatus('')
+                    }}
+                    prefixIcon={<IconLanguages size={15} />}
+                    options={SKILL_LANGUAGES.map((language) => ({
+                      value: language.value,
+                      label: language.label,
+                    }))}
+                    ariaLabel="目标翻译语言"
+                  />
                 </div>
               </div>
 

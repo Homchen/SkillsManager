@@ -33,8 +33,9 @@ import {
 } from '../../wailsjs/go/main/App'
 import {findSkillFile, type SkillHrefTarget} from '../lib/skillRelativeHref'
 import {descriptionFromFrontmatter} from '../lib/skillFrontmatter'
-import {IconCopyPlus, IconPencil} from '../components/icons'
+import {IconCheck, IconCopyPlus, IconPencil} from '../components/icons'
 import {SKILL_LANGUAGES, languageLabel} from '../lib/languages'
+import {Select} from '../components/Select'
 import {logClientWarn} from '../lib/clientLog'
 import type {SkillI18nInfo, TranslationTask} from '../types'
 
@@ -128,8 +129,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   const [startingCopy, setStartingCopy] = useState(false)
   const [editingLanguage, setEditingLanguage] = useState('')
   const [i18n, setI18n] = useState<SkillI18nInfo | null>(null)
-  const [languageMenuOpen, setLanguageMenuOpen] = useState(false)
-  const [originalLanguageMenuOpen, setOriginalLanguageMenuOpen] = useState(false)
   const [originalLanguagePromptDismissed, setOriginalLanguagePromptDismissed] =
     useState(false)
   const [retagPromptOpen, setRetagPromptOpen] = useState(false)
@@ -145,8 +144,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   const leaveResolverRef = useRef<((proceed: boolean) => void) | null>(null)
   const [translatePrompt, setTranslatePrompt] = useState<{kind: 'save'} | null>(null)
   const translatePromptResolverRef = useRef<((value: unknown) => void) | null>(null)
-  const languageMenuRef = useRef<HTMLDivElement | null>(null)
-  const originalLanguageMenuRef = useRef<HTMLDivElement | null>(null)
   const translationRequestRef = useRef(0)
   const completedTranslationRef = useRef('')
   const pendingInitialFileRef = useRef<string | null>(null)
@@ -202,8 +199,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   useEffect(() => {
     setI18n(null)
     setEditingLanguage('')
-    setLanguageMenuOpen(false)
-    setOriginalLanguageMenuOpen(false)
     setOriginalLanguagePromptDismissed(false)
     setRetagPromptOpen(false)
     setConfirmPrompt(null)
@@ -227,35 +222,17 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   }, [skillId])
 
   useEffect(() => {
-    if (!languageMenuOpen && !originalLanguageMenuOpen) return
-    const onDoc = (ev: MouseEvent) => {
-      if (
-        languageMenuRef.current &&
-        !languageMenuRef.current.contains(ev.target as Node)
-      ) {
-        setLanguageMenuOpen(false)
-      }
-      if (
-        originalLanguageMenuRef.current &&
-        !originalLanguageMenuRef.current.contains(ev.target as Node)
-      ) {
-        setOriginalLanguageMenuOpen(false)
-      }
-    }
+    if (!retagPromptOpen) return
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
-        setLanguageMenuOpen(false)
-        setOriginalLanguageMenuOpen(false)
         setRetagPromptOpen(false)
       }
     }
-    document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('mousedown', onDoc)
       document.removeEventListener('keydown', onKey)
     }
-  }, [languageMenuOpen, originalLanguageMenuOpen])
+  }, [retagPromptOpen])
 
   const loadFiles = useCallback(async () => {
     const gen = ++filesGenRef.current
@@ -688,8 +665,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   function openRetagPrompt() {
     if (!i18n?.defaultLanguage) return
     setOriginalLanguage(i18n.defaultLanguage)
-    setOriginalLanguageMenuOpen(false)
-    setLanguageMenuOpen(false)
     setRetagPromptOpen(true)
   }
 
@@ -708,7 +683,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
         setEditingLanguage(originalLanguage)
       }
       setRetagPromptOpen(false)
-      setOriginalLanguageMenuOpen(false)
       await loadI18n(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -719,11 +693,9 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
 
   async function handleSwitchLanguage(language: string) {
     if (language === editingLanguage || !i18n?.defaultLanguage) {
-      setLanguageMenuOpen(false)
       return
     }
     if (dirty && !(await tryLeave())) return
-    setLanguageMenuOpen(false)
     setEditingLanguage(language)
   }
 
@@ -736,7 +708,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   async function handleDeleteLanguage(language: string) {
     if (!i18n || language === i18n.defaultLanguage) return
     if (editingLanguage === language && dirty && !(await tryLeave())) return
-    setLanguageMenuOpen(false)
     setConfirmPrompt({kind: 'delete-language', language})
   }
 
@@ -789,40 +760,16 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
             </p>
             <div className="field">
               <span>原版语言</span>
-              <div className="field-select" ref={originalLanguageMenuRef}>
-                <button
-                  type="button"
-                  className="field-select-trigger"
-                  disabled={settingLanguage}
-                  aria-haspopup="listbox"
-                  aria-expanded={originalLanguageMenuOpen}
-                  onClick={() => setOriginalLanguageMenuOpen((open) => !open)}
-                >
-                  {languageLabel(originalLanguage)}
-                </button>
-                {originalLanguageMenuOpen ? (
-                  <ul className="field-select-menu" role="listbox">
-                    {SKILL_LANGUAGES.map((language) => (
-                      <li key={language.value} role="presentation">
-                        <button
-                          type="button"
-                          role="option"
-                          aria-selected={originalLanguage === language.value}
-                          className={
-                            originalLanguage === language.value ? 'is-active' : undefined
-                          }
-                          onClick={() => {
-                            setOriginalLanguage(language.value)
-                            setOriginalLanguageMenuOpen(false)
-                          }}
-                        >
-                          {language.label}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
+              <Select
+                value={originalLanguage}
+                onChange={setOriginalLanguage}
+                disabled={settingLanguage}
+                options={SKILL_LANGUAGES.map((language) => ({
+                  value: language.value,
+                  label: language.label,
+                }))}
+                ariaLabel="选择原版语言"
+              />
             </div>
             <div className="dialog-actions">
               <button
@@ -830,7 +777,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
                 className="btn"
                 disabled={settingLanguage}
                 onClick={() => {
-                  setOriginalLanguageMenuOpen(false)
                   setOriginalLanguagePromptDismissed(true)
                 }}
               >
@@ -864,48 +810,23 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
             </p>
             <div className="field">
               <span>原版语言</span>
-              <div className="field-select" ref={originalLanguageMenuRef}>
-                <button
-                  type="button"
-                  className="field-select-trigger"
-                  disabled={settingLanguage}
-                  aria-haspopup="listbox"
-                  aria-expanded={originalLanguageMenuOpen}
-                  onClick={() => setOriginalLanguageMenuOpen((open) => !open)}
-                >
-                  {languageLabel(originalLanguage)}
-                </button>
-                {originalLanguageMenuOpen ? (
-                  <ul className="field-select-menu" role="listbox">
-                    {SKILL_LANGUAGES.map((language) => {
-                      const occupied =
-                        language.value !== i18n.defaultLanguage &&
-                        (i18n.languages ?? []).includes(language.value)
-                      return (
-                        <li key={language.value} role="presentation">
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={originalLanguage === language.value}
-                            className={
-                              originalLanguage === language.value ? 'is-active' : undefined
-                            }
-                            disabled={occupied}
-                            title={occupied ? '该语言版本已存在' : undefined}
-                            onClick={() => {
-                              setOriginalLanguage(language.value)
-                              setOriginalLanguageMenuOpen(false)
-                            }}
-                          >
-                            {language.label}
-                            {occupied ? '（已有版本）' : ''}
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                ) : null}
-              </div>
+              <Select
+                value={originalLanguage}
+                onChange={setOriginalLanguage}
+                disabled={settingLanguage}
+                options={SKILL_LANGUAGES.map((language) => {
+                  const occupied =
+                    language.value !== i18n.defaultLanguage &&
+                    (i18n.languages ?? []).includes(language.value)
+                  return {
+                    value: language.value,
+                    label: occupied ? `${language.label}（已有版本）` : language.label,
+                    disabled: occupied,
+                    title: occupied ? '该语言版本已存在' : undefined,
+                  }
+                })}
+                ariaLabel="更改原版语言"
+              />
             </div>
             <div className="dialog-actions">
               <button
@@ -913,7 +834,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
                 className="btn"
                 disabled={settingLanguage}
                 onClick={() => {
-                  setOriginalLanguageMenuOpen(false)
                   setRetagPromptOpen(false)
                 }}
               >
@@ -1225,14 +1145,13 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
         <span className="editor-skill-id" title={skillId}>
           {skillId}
         </span>
-        <div className="field-select editor-lang-select" ref={languageMenuRef}>
-          <button
-            type="button"
-            className="field-select-trigger"
+        <div className="editor-lang-select">
+          <Select
+            size="sm"
+            value={activeLanguage}
+            onChange={(val) => void handleSwitchLanguage(val)}
             disabled={settingLanguage || !i18n}
-            aria-haspopup="listbox"
-            aria-expanded={languageMenuOpen}
-            aria-label={
+            ariaLabel={
               i18n && !i18n.defaultLanguage ? '设置原版语言' : '切换语言版本'
             }
             title={
@@ -1240,52 +1159,51 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
                 ? '尚未设置原版语言，点击进行设置'
                 : undefined
             }
-            onClick={() => {
-              if (i18n && !i18n.defaultLanguage) {
-                setOriginalLanguagePromptDismissed(false)
-                return
-              }
-              setLanguageMenuOpen((open) => !open)
-            }}
-          >
-            {languageLabel(activeLanguage)}
-          </button>
-          {languageMenuOpen ? (
-            <ul className="field-select-menu" role="listbox">
-              {(i18n?.languages.length ? i18n.languages : [i18n?.defaultLanguage ?? '']).map(
-                (language) => (
-                  <li key={language || 'unset'} role="presentation" className="editor-lang-option">
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={language === activeLanguage}
-                      className={language === activeLanguage ? 'is-active' : undefined}
-                      disabled={settingLanguage || !language}
-                      onClick={() => void handleSwitchLanguage(language)}
-                    >
-                      {languageLabel(language)}
-                      {language === i18n?.defaultLanguage ? '（默认）' : ''}
-                    </button>
-                    {language && language !== i18n?.defaultLanguage ? (
+            options={(i18n?.languages.length ? i18n.languages : [i18n?.defaultLanguage ?? '']).map(
+              (language) => ({
+                value: language,
+                label: (
+                  <span>
+                    {languageLabel(language)}
+                    {language === i18n?.defaultLanguage ? '（默认）' : ''}
+                  </span>
+                ),
+                disabled: settingLanguage || !language,
+              }),
+            )}
+            renderOption={(option, isSelected) => {
+              const lang = option.value
+              return (
+                <>
+                  <div className="custom-select-option-main">
+                    <span className="custom-select-option-label">{option.label}</span>
+                  </div>
+                  <div className="custom-select-option-side">
+                    {lang && lang !== i18n?.defaultLanguage ? (
                       <button
                         type="button"
-                        className="danger"
+                        className="custom-select-option-del-btn"
                         disabled={settingLanguage}
-                        aria-label={`删除 ${languageLabel(language)}`}
+                        aria-label={`删除 ${languageLabel(lang)}`}
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
-                          void handleDeleteLanguage(language)
+                          void handleDeleteLanguage(lang)
                         }}
                       >
                         删除
                       </button>
                     ) : null}
-                  </li>
-                ),
-              )}
-            </ul>
-          ) : null}
+                    {isSelected ? (
+                      <span className="custom-select-option-check" aria-hidden="true">
+                        <IconCheck size={12} />
+                      </span>
+                    ) : null}
+                  </div>
+                </>
+              )
+            }}
+          />
         </div>
         {i18n?.defaultLanguage ? (
           <button

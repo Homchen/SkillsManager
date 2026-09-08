@@ -154,6 +154,15 @@ export function IconChevron(props: IconProps) {
   )
 }
 
+/** 向下箭头（用于下拉框等，展开时可通过 CSS 翻转） */
+export function IconChevronDown(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </Icon>
+  )
+}
+
 /** 权限不足（未提权） */
 export function IconShieldAlert(props: IconProps) {
   return (
