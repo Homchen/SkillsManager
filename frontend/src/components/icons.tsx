@@ -32,6 +32,28 @@ function Icon({
   )
 }
 
+/** 源仓枢纽（导航品牌标，实心以免细描边在小尺寸糊成团） */
+export function IconHub(props: IconProps) {
+  const size = props.size ?? 20
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={props.className}
+      style={props.style}
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="8" height="8" rx="2" />
+      <rect x="13" y="3" width="8" height="8" rx="2" opacity="0.72" />
+      <rect x="3" y="13" width="8" height="8" rx="2" opacity="0.72" />
+      <rect x="13" y="13" width="8" height="8" rx="2" opacity="0.42" />
+    </svg>
+  )
+}
+
 /** 新建 */
 export function IconPlus(props: IconProps) {
   return (
