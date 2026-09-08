@@ -120,7 +120,7 @@ export function DemoOrganize({
         </div>
         {report || executed || previewFilled ? (
           <div className="organize-header-right">
-            <div className="organize-header-tools" role="group">
+            <div className="toolbar-icon-group organize-header-tools" role="group">
               {report || executed ? (
                 <button
                   type="button"

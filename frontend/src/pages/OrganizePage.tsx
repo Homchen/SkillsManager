@@ -752,11 +752,11 @@ export default function OrganizePage({onBack}: Props) {
 
         {restoreOrphansAvailable || report || plan ? (
           <div className="organize-header-right">
-            <div className="organize-header-tools" role="group" aria-label="扫描与辅助">
+            <div className="toolbar-icon-group organize-header-tools" role="group" aria-label="扫描与辅助">
               {restoreOrphansAvailable ? (
                 <button
                   type="button"
-                  className={`btn btn-icon${restoreScanning ? ' is-busy' : ''}`}
+                  className={`btn btn-icon${restoreScanning ? ' is-active' : ''}`}
                   disabled={restoreScanning || restoringOrphans || deepScanning}
                   onClick={() => void handleScanRestoreOrphans()}
                   aria-label={restoreScanning ? '正在扫描误迁链接' : '恢复误迁链接'}
@@ -781,7 +781,7 @@ export default function OrganizePage({onBack}: Props) {
               {plan ? (
                 <button
                   type="button"
-                  className={`btn btn-icon${deepScanning ? ' is-busy' : ''}`}
+                  className={`btn btn-icon${deepScanning ? ' is-active' : ''}`}
                   disabled={loadingPreview && !deepScanning}
                   onClick={() => (deepScanning ? handleCancelDeepScan() : void handleDeepScan())}
                   aria-label={deepScanning ? '取消深度扫描' : '深度扫描'}
@@ -798,7 +798,7 @@ export default function OrganizePage({onBack}: Props) {
               {plan ? (
                 <button
                   type="button"
-                  className={`btn btn-icon${loadingPreview && !deepScanning ? ' is-busy' : ''}`}
+                  className={`btn btn-icon${loadingPreview && !deepScanning ? ' is-active' : ''}`}
                   disabled={loadingPreview || executing || deepScanning}
                   onClick={() => void handlePreview()}
                   aria-label={
