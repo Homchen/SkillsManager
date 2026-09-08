@@ -329,11 +329,15 @@ export function DemoOrganize({
                   </div>
                   <div className="organize-table-wrap">
                     <table className="organize-table">
+                      <colgroup>
+                        <col className="organize-col-check" />
+                        <col className="organize-col-skill" />
+                        <col className="organize-col-source" />
+                      </colgroup>
                       <thead>
                         <tr>
-                          <th style={{width: 48, textAlign: 'center'}}>选中</th>
-                          <th style={{minWidth: 200}}>技能名称 / ID</th>
-                          <th style={{width: 140}}>动作类型</th>
+                          <th className="organize-th-check">选中</th>
+                          <th>技能名称 / ID</th>
                           <th>来源路径与对应工具</th>
                         </tr>
                       </thead>
@@ -354,14 +358,12 @@ export function DemoOrganize({
                               </td>
                               <td>
                                 <div className="organize-skill-cell">
-                                  <span className="organize-skill-id-chip">{action.skillId}</span>
+                                  <div className="organize-skill-id-block">
+                                    <span className="organize-skill-id-chip" title={action.skillId}>
+                                      {action.skillId}
+                                    </span>
+                                  </div>
                                 </div>
-                              </td>
-                              <td>
-                                <span className={`organize-action-pill ${config.toneClass}`}>
-                                  <ActionIcon size={13} />
-                                  <span>{config.label}</span>
-                                </span>
                               </td>
                               <td>
                                 <div className="organize-sources-cell">
@@ -375,7 +377,9 @@ export function DemoOrganize({
                                     >
                                       {badge.displayName}
                                     </span>
-                                    <span className="mono muted">{action.sources[0]}</span>
+                                    <span className="organize-source-path" title={action.sources[0]} dir="ltr">
+                                      <span className="organize-path-leaf">{action.sources[0]}</span>
+                                    </span>
                                   </div>
                                 </div>
                               </td>

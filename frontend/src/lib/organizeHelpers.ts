@@ -259,6 +259,29 @@ export function calculateOrganizeMetrics(
   }
 }
 
+/** 把技能 ID / 来源路径拆成末段与父路径，供表格在窄列里优先展示可辨识的叶子名。 */
+export function splitDisplayPath(path: string): {
+  leaf: string
+  parent: string
+  separator: string
+  full: string
+} {
+  const full = path.trim()
+  if (!full) {
+    return {leaf: '', parent: '', separator: '/', full: ''}
+  }
+  const lastSepIdx = Math.max(full.lastIndexOf('/'), full.lastIndexOf('\\'))
+  if (lastSepIdx < 0) {
+    return {leaf: full, parent: '', separator: '/', full}
+  }
+  return {
+    leaf: full.slice(lastSepIdx + 1),
+    parent: full.slice(0, lastSepIdx),
+    separator: full[lastSepIdx],
+    full,
+  }
+}
+
 /** 把深度扫描回调路径拆成祖先面包屑 + 当前目录名，便于进度条突出“正在走进哪一层”。 */
 export function splitScanWalkPath(path: string): {leaf: string; crumbs: string[]; full: string} {
   const full = path.trim()

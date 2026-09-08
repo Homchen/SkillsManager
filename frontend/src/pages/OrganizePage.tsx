@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState, type ReactNode} from 'react''
 import {
   ApplyConflictRound,
   CanExecuteOrganize,
@@ -62,6 +62,7 @@ import {
   isOrganizeActionSelectable,
   normalizeCanExecute,
   organizeSelectionState,
+  splitDisplayPath,
   splitScanWalkPath,
 } from '../lib/organizeHelpers'
 
@@ -112,6 +113,46 @@ const ACTION_CONFIG: Record<
     icon: IconCheck,
     toneClass: 'type-skipped_by_user',
   },
+}
+
+function OrganizeSkillIdentity({
+  skillId,
+  trailing,
+}: {
+  skillId: string
+  trailing?: ReactNode
+}) {
+  const {leaf, parent} = splitDisplayPath(skillId)
+  return (
+    <div className="organize-skill-cell">
+      <div className="organize-skill-id-block">
+        <span className="organize-skill-id-chip" title={skillId}>
+          {leaf || skillId}
+        </span>
+        {parent ? (
+          <span className="organize-skill-id-parent" title={skillId}>
+            {parent}
+          </span>
+        ) : null}
+      </div>
+      {trailing ? <div className="organize-skill-trailing">{trailing}</div> : null}
+    </div>
+  )
+}
+
+function OrganizeSourcePath({path}: {path: string}) {
+  const {leaf, parent, separator} = splitDisplayPath(path)
+  return (
+    <span className="organize-source-path" title={path} dir="ltr">
+      {parent ? (
+        <>
+          <span className="organize-path-parent">{parent}</span>
+          <span className="organize-path-sep">{separator}</span>
+        </>
+      ) : null}
+      <span className="organize-path-leaf">{leaf || path}</span>
+    </span>
+  )
 }
 
 const FILE_STATUS_LABELS: Record<string, string> = {
@@ -1532,11 +1573,15 @@ export default function OrganizePage({onBack}: Props) {
                     {!collapsed ? (
                       <div className="organize-table-wrap">
                         <table className="organize-table">
+                          <colgroup>
+                            <col className="organize-col-check" />
+                            <col className="organize-col-skill" />
+                            <col className="organize-col-source" />
+                          </colgroup>
                           <thead>
                             <tr>
-                              <th style={{width: 48, textAlign: 'center'}}>选中</th>
-                              <th style={{minWidth: 200}}>技能名称 / ID</th>
-                              <th style={{width: 140}}>动作类型</th>
+                              <th className="organize-th-check">选中</th>
+                              <th>技能名称 / ID</th>
                               <th>来源路径与对应工具</th>
                             </tr>
                           </thead>
@@ -1570,59 +1615,52 @@ export default function OrganizePage({onBack}: Props) {
                                   </td>
 
                                   <td>
-                                    <div className="organize-skill-cell">
-                                      <span className="organize-skill-id-chip">
-                                        {action.skillId}
-                                      </span>
-                                      <button
-                                        type="button"
-                                        className="organize-copy-btn"
-                                        title="复制技能 ID"
-                                        onClick={() =>
-                                          copyText(action.skillId, `skill-${index}`)
-                                        }
-                                      >
-                                        {copiedId === `skill-${index}` ? (
-                                          <IconCheck size={13} style={{color: '#15803d'}} />
-                                        ) : (
-                                          <IconCopy size={13} />
-                                        )}
-                                      </button>
-                                      {action.type === 'merge_conflict' ? (
-                                        conflictDecided ? (
-                                          <span className="organize-conflict-status-pill is-done">
-                                            <IconCheck size={11} />
-                                            已决议
-                                          </span>
-                                        ) : (
-                                          <span className="organize-conflict-status-pill is-diff">
-                                            <IconAlertTriangle size={11} />
-                                            待决议
-                                          </span>
-                                        )
-                                      ) : null}
-                                      {action.type === 'merge_conflict' ? (
-                                        <button
-                                          type="button"
-                                          className="link-btn"
-                                          onClick={() =>
-                                            openConflictDialog(action.skillId)
-                                          }
-                                          style={{fontSize: 12}}
-                                        >
-                                          {conflictDecided ? '查看对比' : '处理冲突'}
-                                        </button>
-                                      ) : null}
-                                    </div>
-                                  </td>
-
-                                  <td>
-                                    <span
-                                      className={`organize-action-pill ${config.toneClass}`}
-                                    >
-                                      <ActionIcon size={13} />
-                                      <span>{config.label}</span>
-                                    </span>
+                                    <OrganizeSkillIdentity
+                                      skillId={action.skillId}
+                                      trailing={
+                                        <>
+                                          <button
+                                            type="button"
+                                            className="organize-copy-btn"
+                                            title="复制技能 ID"
+                                            onClick={() =>
+                                              copyText(action.skillId, `skill-${index}`)
+                                            }
+                                          >
+                                            {copiedId === `skill-${index}` ? (
+                                              <IconCheck size={13} style={{color: '#15803d'}} />
+                                            ) : (
+                                              <IconCopy size={13} />
+                                            )}
+                                          </button>
+                                          {action.type === 'merge_conflict' ? (
+                                            conflictDecided ? (
+                                              <span className="organize-conflict-status-pill is-done">
+                                                <IconCheck size={11} />
+                                                已决议
+                                              </span>
+                                            ) : (
+                                              <span className="organize-conflict-status-pill is-diff">
+                                                <IconAlertTriangle size={11} />
+                                                待决议
+                                              </span>
+                                            )
+                                          ) : null}
+                                          {action.type === 'merge_conflict' ? (
+                                            <button
+                                              type="button"
+                                              className="link-btn"
+                                              onClick={() =>
+                                                openConflictDialog(action.skillId)
+                                              }
+                                              style={{fontSize: 12}}
+                                            >
+                                              {conflictDecided ? '查看对比' : '处理冲突'}
+                                            </button>
+                                          ) : null}
+                                        </>
+                                      }
+                                    />
                                   </td>
 
                                   <td>
@@ -1661,12 +1699,7 @@ export default function OrganizePage({onBack}: Props) {
                                                   外部
                                                 </span>
                                               )}
-                                              <span
-                                                className="organize-source-path"
-                                                title={src}
-                                              >
-                                                {src}
-                                              </span>
+                                              <OrganizeSourcePath path={src} />
                                               <button
                                                 type="button"
                                                 className="organize-copy-btn"

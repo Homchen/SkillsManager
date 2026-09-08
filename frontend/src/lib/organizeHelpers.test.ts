@@ -13,6 +13,7 @@ import {
   matchesOrganizeActionSearch,
   normalizeCanExecute,
   organizeSelectionState,
+  splitDisplayPath,
   splitScanWalkPath,
   type ConflictSkillLike,
 } from './organizeHelpers'
@@ -389,6 +390,41 @@ describe('calculateOrganizeMetrics', () => {
     expect(metrics.unresolvedConflictCount).toBe(1)
     expect(metrics.toggleableCount).toBe(5) // move_to_hub(2) + replace(1) + conflict(1) + fix(1)
     expect(metrics.selectedCount).toBe(3) // 1 move + 1 replace + 1 conflict
+  })
+})
+
+describe('splitDisplayPath', () => {
+  it('returns empty parts for blank input', () => {
+    expect(splitDisplayPath('')).toEqual({leaf: '', parent: '', separator: '/', full: ''})
+    expect(splitDisplayPath('   ')).toEqual({leaf: '', parent: '', separator: '/', full: ''})
+  })
+
+  it('keeps a single segment as the leaf', () => {
+    expect(splitDisplayPath('code-review')).toEqual({
+      leaf: 'code-review',
+      parent: '',
+      separator: '/',
+      full: 'code-review',
+    })
+  })
+
+  it('splits posix skill ids and Windows source paths', () => {
+    expect(splitDisplayPath('.bmad/cache/external-modules/bmb/samples/bmad-agent-code-coach')).toEqual({
+      leaf: 'bmad-agent-code-coach',
+      parent: '.bmad/cache/external-modules/bmb/samples',
+      separator: '/',
+      full: '.bmad/cache/external-modules/bmb/samples/bmad-agent-code-coach',
+    })
+    expect(
+      splitDisplayPath(
+        'C:\\Users\\Administrator\\.bmad\\cache\\external-modules\\bmb\\samples\\bmad-agent-code-coach',
+      ),
+    ).toEqual({
+      leaf: 'bmad-agent-code-coach',
+      parent: 'C:\\Users\\Administrator\\.bmad\\cache\\external-modules\\bmb\\samples',
+      separator: '\\',
+      full: 'C:\\Users\\Administrator\\.bmad\\cache\\external-modules\\bmb\\samples\\bmad-agent-code-coach',
+    })
   })
 })
 

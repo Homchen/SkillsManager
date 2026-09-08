@@ -3297,6 +3297,8 @@ body.is-marquee-selecting * {
   flex-direction: column;
   gap: 16px;
   min-height: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding-bottom: 48px;
 }
 
@@ -4256,10 +4258,13 @@ body.is-marquee-selecting * {
   border-radius: 12px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .organize-group-block {
   border-bottom: 1px solid var(--border);
+  min-width: 0;
 }
 
 .organize-group-block:last-child {
@@ -4379,16 +4384,33 @@ body.is-marquee-selecting * {
   gap: 12px;
 }
 
-/* 数据表格增强 */
+/* 数据表格：固定列宽，长路径在单元格内省略，避免整页横向滚动 */
 .organize-table-wrap {
-  overflow-x: auto;
+  overflow: hidden;
+  width: 100%;
+  min-width: 0;
 }
 
 .organize-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
   text-align: left;
+}
+
+.organize-col-check,
+.organize-th-check {
+  width: 52px;
+  text-align: center;
+}
+
+.organize-col-skill {
+  width: 32%;
+}
+
+.organize-col-source {
+  width: auto;
 }
 
 .organize-table th {
@@ -4396,15 +4418,23 @@ body.is-marquee-selecting * {
   color: var(--muted);
   font-weight: 600;
   font-size: 12px;
-  padding: 10px 20px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 
 .organize-table td {
-  padding: 11px 20px;
+  padding: 10px 14px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   vertical-align: middle;
+  overflow: hidden;
+  max-width: 0;
+}
+
+.organize-table td:first-child,
+.organize-th-check {
+  max-width: none;
+  overflow: visible;
 }
 
 .organize-table tr:hover td {
@@ -4423,12 +4453,30 @@ body.is-marquee-selecting * {
 
 .organize-skill-cell {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   flex-wrap: wrap;
 }
 
+.organize-skill-id-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 8rem;
+}
+
+.organize-skill-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+}
+
 .organize-skill-id-chip {
+  display: block;
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 12.5px;
   font-weight: 600;
@@ -4437,6 +4485,22 @@ body.is-marquee-selecting * {
   padding: 2px 8px;
   border-radius: 6px;
   border: 1px solid #e2e8f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.organize-skill-id-parent {
+  display: block;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .organize-copy-btn {
@@ -4451,6 +4515,7 @@ body.is-marquee-selecting * {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .organize-copy-btn:hover {
@@ -4508,6 +4573,8 @@ body.is-marquee-selecting * {
   border-radius: 9999px;
   font-size: 11px;
   font-weight: 600;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .organize-conflict-status-pill.is-done {
@@ -4524,14 +4591,17 @@ body.is-marquee-selecting * {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .organize-source-item {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   font-size: 11.5px;
-  max-width: 100%;
+  min-width: 0;
+  width: 100%;
 }
 
 .organize-tool-badge {
@@ -4548,12 +4618,35 @@ body.is-marquee-selecting * {
 }
 
 .organize-source-path {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
   font-family: Consolas, "Cascadia Mono", monospace;
   color: var(--muted);
-  white-space: nowrap;
+}
+
+.organize-path-parent {
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 480px;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.organize-path-sep {
+  flex-shrink: 0;
+}
+
+.organize-path-leaf {
+  flex: 0 1 auto;
+  min-width: 3ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-weight: 600;
 }
 
 /* 深度扫描与扫描进度通知条 */
