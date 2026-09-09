@@ -551,6 +551,16 @@ body,
   background: #fff;
 }
 
+.search-input-wrapper input[type="search"]::-webkit-search-decoration,
+.search-input-wrapper input[type="search"]::-webkit-search-cancel-button,
+.search-input-wrapper input[type="search"]::-webkit-search-results-button,
+.search-input-wrapper input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* 选择器需压过 .page-toolbar button，否则会变成白底带边框、图标被 padding 挤没的方块 */
+.page-toolbar .search-clear-btn,
 .search-clear-btn {
   position: absolute;
   right: 8px;
@@ -568,6 +578,7 @@ body,
   transition: all 0.12s ease;
 }
 
+.page-toolbar .search-clear-btn:hover,
 .search-clear-btn:hover {
   background: #cbd5e1;
   color: #0f172a;
