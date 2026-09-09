@@ -85,3 +85,42 @@ export function parentDirPath(filePath: string | null): string {
   const idx = normalized.lastIndexOf('/')
   return idx >= 0 ? normalized.slice(0, idx) : ''
 }
+
+/** 收集树中全部目录 path，用于筛选时展开匹配分支。 */
+export function collectDirPaths(nodes: FileTreeNode[]): string[] {
+  const out: string[] = []
+  const walk = (list: FileTreeNode[]) => {
+    for (const node of list) {
+      if (node.kind !== 'dir') continue
+      out.push(node.path)
+      if (node.children?.length) walk(node.children)
+    }
+  }
+  walk(nodes)
+  return out
+}
+
+/**
+ * 按文件名 / 路径筛选。目录名命中则保留整棵子树；
+ * 否则只保留含匹配后代的分支。
+ */
+export function filterFileTree(nodes: FileTreeNode[], query: string): FileTreeNode[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return nodes
+
+  const match = (node: FileTreeNode): FileTreeNode | null => {
+    if (node.kind === 'file') {
+      return node.name.toLowerCase().includes(q) || node.path.toLowerCase().includes(q)
+        ? node
+        : null
+    }
+    if (node.name.toLowerCase().includes(q)) return node
+    const children = (node.children ?? [])
+      .map(match)
+      .filter((child): child is FileTreeNode => child !== null)
+    if (children.length === 0) return null
+    return {...node, children}
+  }
+
+  return nodes.map(match).filter((node): node is FileTreeNode => node !== null)
+}

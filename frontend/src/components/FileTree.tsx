@@ -1,10 +1,14 @@
 import {useEffect, useState, type KeyboardEvent as ReactKeyboardEvent} from 'react'
-import {ancestorDirPaths, type FileTreeNode} from '../lib/fileTree'
+import {fileGlyphKind, type FileGlyphKind} from '../lib/fileGlyph'
+import {ancestorDirPaths, collectDirPaths, type FileTreeNode} from '../lib/fileTree'
 
 type Props = {
   nodes: FileTreeNode[]
   selected: string | null
   selectedDir?: string | null
+  /** 筛选时展开全部可见目录。 */
+  expandAll?: boolean
+  emptyLabel?: string
   onSelectFile: (path: string) => void
   onSelectDir?: (path: string) => void
   onRename?: (node: FileTreeNode) => void
@@ -40,7 +44,13 @@ function Chevron({open}: {open: boolean}) {
 
 function FolderIcon({open}: {open: boolean}) {
   return (
-    <svg className="file-tree-icon folder" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+    <svg
+      className="file-tree-icon is-dir"
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+    >
       {open ? (
         <path
           fill="currentColor"
@@ -56,15 +66,34 @@ function FolderIcon({open}: {open: boolean}) {
   )
 }
 
-function FileIcon() {
+function FileGlyph({kind}: {kind: FileGlyphKind}) {
   return (
-    <svg className="file-tree-icon file" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M3.5 1.5A1.5 1.5 0 0 0 2 3v10a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 14 13V5.5L10.5 1.5h-7Zm7 .75V5a.5.5 0 0 0 .5.5h2.75L10.5 2.25Z"
-      />
+    <svg
+      className={`file-tree-icon is-${kind}`}
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+    >
+      {kind === 'skill' ? (
+        <path
+          fill="currentColor"
+          d="M3.5 1.5A1.5 1.5 0 0 0 2 3v10a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 14 13V5.5L10.5 1.5h-7Zm7 .75V5a.5.5 0 0 0 .5.5h2.75L10.5 2.25ZM4.75 8h6.5v1.15h-6.5V8Zm0 2.2h4.5v1.15h-4.5V10.2Z"
+        />
+      ) : (
+        <path
+          fill="currentColor"
+          d="M3.5 1.5A1.5 1.5 0 0 0 2 3v10a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 14 13V5.5L10.5 1.5h-7Zm7 .75V5a.5.5 0 0 0 .5.5h2.75L10.5 2.25Z"
+        />
+      )}
     </svg>
   )
+}
+
+export function FileKindGlyph({path, kind = 'file'}: {path: string; kind?: 'file' | 'dir'}) {
+  const glyph = fileGlyphKind(path, kind)
+  if (glyph === 'dir') return <FolderIcon open={false} />
+  return <FileGlyph kind={glyph} />
 }
 
 /** 与文件树同风格的「新建文件」图标（填充） */
@@ -197,7 +226,7 @@ function TreeNodeRow({
         onKeyDown={handleContextKey}
       >
         <span className="file-tree-chevron-spacer" />
-        <FileIcon />
+        <FileGlyph kind={fileGlyphKind(node.path, 'file')} />
         <span className="file-tree-label">{node.name}</span>
       </button>
     </li>
@@ -208,6 +237,8 @@ export default function FileTree({
   nodes,
   selected,
   selectedDir = null,
+  expandAll = false,
+  emptyLabel = '暂无文件',
   onSelectFile,
   onSelectDir,
   onRename,
@@ -234,6 +265,15 @@ export default function FileTree({
       return next
     })
   }, [selected, selectedDir])
+
+  useEffect(() => {
+    if (!expandAll) return
+    const dirs = collectDirPaths(nodes)
+    setExpanded((prev) => {
+      if (dirs.length === prev.size && dirs.every((d) => prev.has(d))) return prev
+      return new Set(dirs)
+    })
+  }, [expandAll, nodes])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -273,7 +313,7 @@ export default function FileTree({
   }
 
   if (nodes.length === 0) {
-    return <p className="muted">暂无文件</p>
+    return <p className="muted editor-files-empty">{emptyLabel}</p>
   }
 
   const protectRootSkill =

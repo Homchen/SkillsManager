@@ -6,12 +6,17 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from 'react'
 import CodeEditor from '../components/CodeEditor'
 import {AppToast, useAppToast} from '../components/AppToast'
-import FileTree, {NewFileActionIcon, NewFolderActionIcon} from '../components/FileTree'
+import FileTree, {
+  FileKindGlyph,
+  NewFileActionIcon,
+  NewFolderActionIcon,
+} from '../components/FileTree'
 import MarkdownPreview from '../components/MarkdownPreview'
-import {buildFileTree, parentDirPath, type FileTreeNode} from '../lib/fileTree'
+import {buildFileTree, filterFileTree, parentDirPath, type FileTreeNode} from '../lib/fileTree'
 import {isMarkdownPath} from '../lib/languageForPath'
 import {
   CreateSkillDir,
@@ -33,7 +38,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import {findSkillFile, type SkillHrefTarget} from '../lib/skillRelativeHref'
 import {descriptionFromFrontmatter} from '../lib/skillFrontmatter'
-import {IconCheck, IconCopyPlus, IconPencil} from '../components/icons'
+import {IconArrowLeft, IconCheck, IconColumns, IconCopyPlus, IconEye, IconFileCode, IconPencil, IconSave, IconSearch} from '../components/icons'
 import {SKILL_LANGUAGES, languageLabel} from '../lib/languages'
 import {skillLanguageSelectValues} from '../lib/skillI18n'
 import {Select} from '../components/Select'
@@ -89,6 +94,28 @@ function isSkillDefinition(path: string | null): boolean {
   return path?.replace(/\\/g, '/') === 'SKILL.md'
 }
 
+const EDITOR_SIDEBAR_KEY = 'skillsmanager.editor.sidebarWidth'
+const EDITOR_SIDEBAR_MIN = 200
+const EDITOR_SIDEBAR_MAX = 440
+const EDITOR_SIDEBAR_DEFAULT = 272
+
+function readEditorSidebarWidth(): number {
+  try {
+    const raw = localStorage.getItem(EDITOR_SIDEBAR_KEY)
+    const n = raw ? Number(raw) : NaN
+    if (Number.isFinite(n)) {
+      return Math.min(EDITOR_SIDEBAR_MAX, Math.max(EDITOR_SIDEBAR_MIN, n))
+    }
+  } catch {
+    // ignore storage access
+  }
+  return EDITOR_SIDEBAR_DEFAULT
+}
+
+function clampSidebarWidth(width: number): number {
+  return Math.min(EDITOR_SIDEBAR_MAX, Math.max(EDITOR_SIDEBAR_MIN, width))
+}
+
 
 const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   {
@@ -122,7 +149,8 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   const [renameEntryName, setRenameEntryName] = useState('')
   const [entryActionError, setEntryActionError] = useState('')
   const [mutatingEntry, setMutatingEntry] = useState(false)
-  const [status, setStatus] = useState('')
+  const [fileQuery, setFileQuery] = useState('')
+  const [sidebarWidth, setSidebarWidth] = useState(readEditorSidebarWidth)
   const {toast, showToast, dismissToast} = useAppToast()
   const [viewMode, setViewMode] = useState<ViewMode>('preview')
   const [translation, setTranslation] = useState<{language: string; text: string} | null>(null)
@@ -283,6 +311,10 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
     void loadFiles()
   }, [loadFiles])
 
+  useEffect(() => {
+    setFileQuery('')
+  }, [skillId, activeLanguage])
+
   const createParentDir = selectedDir ?? parentDirPath(selected)
 
   async function openCreateEntryDialog(kind: 'file' | 'dir') {
@@ -312,19 +344,18 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
     setCreatingEntry(true)
     setCreateEntryError('')
     setError('')
-    setStatus('')
     try {
       if (createEntryKind === 'file') {
         await CreateSkillFile(skillRef(skillId, activeLanguage), rel)
         await refreshFiles()
         setSelectedDir(null)
         setSelected(rel)
-        setStatus(`已创建 ${rel}`)
+        showToast({message: `已创建 ${rel}`, tone: 'success'})
       } else {
         await CreateSkillDir(skillRef(skillId, activeLanguage), rel)
         await refreshFiles()
         setSelectedDir(rel)
-        setStatus(`已创建文件夹 ${rel}`)
+        showToast({message: `已创建文件夹 ${rel}`, tone: 'success'})
       }
       setCreateEntryKind(null)
     } catch (e) {
@@ -337,7 +368,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   function openEntryAction(kind: 'rename' | 'delete', node: FileTreeNode) {
     if (node.kind === 'file' && node.path.replace(/\\/g, '/') === 'SKILL.md') {
       setError('技能根目录的 SKILL.md 不可重命名或删除')
-      setStatus('')
       return
     }
     setEntryAction({kind, node})
@@ -362,7 +392,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
     setMutatingEntry(true)
     setEntryActionError('')
     setError('')
-    setStatus('')
     try {
       if (kind === 'rename') {
         if (dirty && pathIsWithin(selected, node.path)) {
@@ -381,7 +410,7 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
         if (selectedDir && pathIsWithin(selectedDir, node.path)) {
           setSelectedDir(replacePathPrefix(selectedDir, node.path, nextPath))
         }
-        setStatus(`已重命名为 ${nextPath}`)
+        showToast({message: `已重命名为 ${nextPath}`, tone: 'success'})
       } else {
         await DeleteSkillEntry(skillRef(skillId, activeLanguage), node.path)
         const list = await refreshFiles()
@@ -400,7 +429,7 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
         } else if (pathIsWithin(selectedDir, node.path)) {
           setSelectedDir(null)
         }
-        setStatus(`已删除 ${node.path}`)
+        showToast({message: `已删除 ${node.path}`, tone: 'success'})
       }
       setEntryAction(null)
     } catch (e) {
@@ -419,7 +448,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
     let cancelled = false
     setLoadingFile(true)
     setError('')
-    setStatus('')
     void ReadSkillFile(skillRef(skillId, activeLanguage), selected)
       .then((text) => {
         if (cancelled) return
@@ -494,6 +522,12 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   ])
 
   const fileTree = useMemo(() => buildFileTree(files), [files])
+  const visibleFileTree = useMemo(
+    () => filterFileTree(fileTree, fileQuery),
+    [fileTree, fileQuery],
+  )
+
+  const handleSaveRef = useRef<() => Promise<boolean>>(async () => false)
 
   function finishLeavePrompt(proceed: boolean) {
     setLeavePromptOpen(false)
@@ -520,11 +554,10 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
     if (!selected) return false
     setSaving(true)
     setError('')
-    setStatus('')
     try {
       await WriteSkillFile(skillRef(skillId, activeLanguage), selected, content)
       setSavedContent(content)
-      setStatus('已保存')
+      showToast({message: '已保存', tone: 'success'})
       return true
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -532,6 +565,54 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
     } finally {
       setSaving(false)
     }
+  }
+
+  handleSaveRef.current = handleSave
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return
+      event.preventDefault()
+      if (
+        leavePromptOpen ||
+        createEntryKind ||
+        entryAction ||
+        confirmPrompt ||
+        translatePrompt
+      ) {
+        return
+      }
+      if (!dirtyRef.current) return
+      void handleSaveRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [leavePromptOpen, createEntryKind, entryAction, confirmPrompt, translatePrompt])
+
+  function onSidebarResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault()
+    const startX = event.clientX
+    const startW = sidebarWidth
+    const previousUserSelect = document.body.style.userSelect
+    document.body.style.userSelect = 'none'
+    const onMove = (ev: PointerEvent) => {
+      setSidebarWidth(clampSidebarWidth(startW + ev.clientX - startX))
+    }
+    const onUp = (ev: PointerEvent) => {
+      document.body.style.userSelect = previousUserSelect
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      try {
+        localStorage.setItem(
+          EDITOR_SIDEBAR_KEY,
+          String(clampSidebarWidth(startW + ev.clientX - startX)),
+        )
+      } catch {
+        // ignore storage access
+      }
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
   }
 
   const tryLeave = useCallback(async () => {
@@ -760,7 +841,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
               指定后才能切换或创建语言版本，也可稍后设置。
             </p>
             <div className="field">
-              <span>原版语言</span>
               <Select
                 value={originalLanguage}
                 onChange={setOriginalLanguage}
@@ -810,7 +890,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
               {languageLabel(i18n.defaultLanguage)}。
             </p>
             <div className="field">
-              <span>原版语言</span>
               <Select
                 value={originalLanguage}
                 onChange={setOriginalLanguage}
@@ -1139,137 +1218,160 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
         </div>
       ) : null}
 
-      <div className="page-toolbar">
-        <button type="button" className="btn" onClick={onBack}>
-          返回
-        </button>
-        <span className="editor-skill-id" title={skillId}>
-          {skillId}
-        </span>
-        <div className="editor-lang-select">
-          <Select
-            size="sm"
-            value={activeLanguage}
-            onChange={(val) => void handleSwitchLanguage(val)}
-            disabled={settingLanguage || !i18n}
-            ariaLabel={
-              i18n && !i18n.defaultLanguage ? '设置原版语言' : '切换语言版本'
-            }
-            title={
-              i18n && !i18n.defaultLanguage
-                ? '尚未设置原版语言，点击进行设置'
-                : undefined
-            }
-            options={skillLanguageSelectValues(i18n).map(
-              (language) => ({
-                value: language,
-                label: (
-                  <span>
-                    {languageLabel(language)}
-                    {language === i18n?.defaultLanguage ? '（默认）' : ''}
-                  </span>
-                ),
-                disabled: settingLanguage || !language,
-              }),
-            )}
-            renderOption={(option, isSelected) => {
-              const lang = option.value
-              return (
-                <>
-                  <div className="custom-select-option-main">
-                    <span className="custom-select-option-label">{option.label}</span>
-                  </div>
-                  <div className="custom-select-option-side">
-                    {lang && lang !== i18n?.defaultLanguage ? (
-                      <button
-                        type="button"
-                        className="custom-select-option-del-btn"
-                        disabled={settingLanguage}
-                        aria-label={`删除 ${languageLabel(lang)}`}
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          void handleDeleteLanguage(lang)
-                        }}
-                      >
-                        删除
-                      </button>
-                    ) : null}
-                    {isSelected ? (
-                      <span className="custom-select-option-check" aria-hidden="true">
-                        <IconCheck size={12} />
-                      </span>
-                    ) : null}
-                  </div>
-                </>
-              )
-            }}
-          />
+      <header className="editor-chrome">
+        <div className="editor-chrome-left">
+          <button type="button" className="btn editor-back-btn" onClick={onBack}>
+            <IconArrowLeft size={16} />
+            <span>返回</span>
+          </button>
+          <div className="editor-identity">
+            <h1 className="editor-skill-title" title={skillId}>
+              {skillId}
+            </h1>
+            {dirty ? (
+              <span
+                className="editor-dirty-pill"
+                title="有未保存修改，可使用快捷键 Ctrl+S 保存"
+              >
+                <span className="editor-dirty-dot" aria-hidden="true" />
+                未保存
+                <kbd className="editor-kbd">Ctrl+S</kbd>
+              </span>
+            ) : null}
+          </div>
         </div>
-        {i18n?.defaultLanguage ? (
+        <div className="editor-chrome-right">
+          <div className="editor-i18n">
+            <div className="editor-lang-select">
+              <Select
+                size="sm"
+                value={activeLanguage}
+                onChange={(val) => void handleSwitchLanguage(val)}
+                disabled={settingLanguage || !i18n}
+                ariaLabel={
+                  i18n && !i18n.defaultLanguage ? '设置原版语言' : '切换语言版本'
+                }
+                title={
+                  i18n && !i18n.defaultLanguage
+                    ? '尚未设置原版语言，点击进行设置'
+                    : undefined
+                }
+                options={skillLanguageSelectValues(i18n).map((language) => ({
+                  value: language,
+                  label: (
+                    <span>
+                      {languageLabel(language)}
+                      {language === i18n?.defaultLanguage ? '（默认）' : ''}
+                    </span>
+                  ),
+                  disabled: settingLanguage || !language,
+                }))}
+                renderOption={(option, isSelected) => {
+                  const lang = option.value
+                  return (
+                    <>
+                      <div className="custom-select-option-main">
+                        <span className="custom-select-option-label">{option.label}</span>
+                      </div>
+                      <div className="custom-select-option-side">
+                        {lang && lang !== i18n?.defaultLanguage ? (
+                          <button
+                            type="button"
+                            className="custom-select-option-del-btn"
+                            disabled={settingLanguage}
+                            aria-label={`删除 ${languageLabel(lang)}`}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              void handleDeleteLanguage(lang)
+                            }}
+                          >
+                            删除
+                          </button>
+                        ) : null}
+                        {isSelected ? (
+                          <span className="custom-select-option-check" aria-hidden="true">
+                            <IconCheck size={12} />
+                          </span>
+                        ) : null}
+                      </div>
+                    </>
+                  )
+                }}
+              />
+            </div>
+            {i18n?.defaultLanguage ? (
+              <button
+                type="button"
+                className="btn btn-icon"
+                disabled={settingLanguage || retagPromptOpen}
+                title="更改原版语言"
+                aria-label="更改原版语言"
+                onClick={openRetagPrompt}
+              >
+                <IconPencil size={16} />
+              </button>
+            ) : null}
+            {editingLanguage && editingLanguage !== i18n?.defaultLanguage ? (
+              <button
+                type="button"
+                className="btn"
+                disabled={settingLanguage}
+                onClick={() => void handleSetDefaultLanguage()}
+              >
+                设为默认
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn editor-create-version"
+              disabled={saving || loadingFiles || translationBusy || !i18n?.defaultLanguage}
+              title={
+                !i18n?.defaultLanguage
+                  ? '请先选择原版语言'
+                  : copyTranslating || startingCopy
+                    ? '创建中…'
+                    : translationBusy
+                      ? '已有创建语言版本任务正在运行'
+                      : createVersionLabel
+              }
+              aria-label={copyTranslating || startingCopy ? '创建中…' : createVersionLabel}
+              onClick={() => void handleTranslateCopy()}
+            >
+              <IconCopyPlus size={16} />
+              <span>{copyTranslating || startingCopy ? '创建中…' : '创建版本'}</span>
+            </button>
+            {copyTranslating ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void handleCancelTranslateCopy()}
+              >
+                取消
+              </button>
+            ) : null}
+            {copyStatus ? (
+              <span className="editor-copy-status" title={copyStatus}>
+                {copyStatus}
+              </span>
+            ) : null}
+          </div>
           <button
             type="button"
-            className="btn btn-icon"
-            disabled={settingLanguage || retagPromptOpen}
-            title="更改原版语言"
-            aria-label="更改原版语言"
-            onClick={openRetagPrompt}
+            className={`btn btn-primary editor-save-btn${dirty ? ' is-dirty' : ''}`}
+            disabled={!selected || saving || loadingFile || !dirty}
+            onClick={() => void handleSave()}
           >
-            <IconPencil size={20} />
+            <IconSave size={15} />
+            <span>{saving ? '保存中…' : '保存'}</span>
           </button>
-        ) : null}
-        {editingLanguage && editingLanguage !== i18n?.defaultLanguage ? (
-          <button
-            type="button"
-            className="btn"
-            disabled={settingLanguage}
-            onClick={() => void handleSetDefaultLanguage()}
-          >
-            设为默认版本
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={!selected || saving || loadingFile || !dirty}
-          onClick={() => void handleSave()}
-        >
-          {saving ? '保存中…' : '保存'}
-        </button>
-        <button
-          type="button"
-          className="btn btn-icon"
-          disabled={saving || loadingFiles || translationBusy || !i18n?.defaultLanguage}
-          title={
-            !i18n?.defaultLanguage
-              ? '请先选择原版语言'
-              : copyTranslating || startingCopy
-                ? '创建中…'
-                : translationBusy
-                  ? '已有创建语言版本任务正在运行'
-                  : createVersionLabel
-          }
-          aria-label={
-            copyTranslating || startingCopy ? '创建中…' : createVersionLabel
-          }
-          onClick={() => void handleTranslateCopy()}
-        >
-          <IconCopyPlus size={22} />
-        </button>
-        {copyTranslating ? (
-          <button type="button" className="btn" onClick={() => void handleCancelTranslateCopy()}>
-            取消创建
-          </button>
-        ) : null}
-        {status ? <span className="muted">{status}</span> : null}
-        {copyStatus ? <span className="muted">{copyStatus}</span> : null}
-        {dirty ? <span className="muted">未保存</span> : null}
-      </div>
+        </div>
+      </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
 
       <div className="editor-layout">
-        <aside className="editor-files">
+        <aside className="editor-files" style={{width: sidebarWidth}}>
           <div className="editor-files-head">
             <div className="editor-files-title">文件</div>
             <div className="editor-files-actions">
@@ -1301,13 +1403,28 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
               </button>
             </div>
           </div>
+          <label className="editor-files-search">
+            <IconSearch size={14} />
+            <input
+              type="search"
+              value={fileQuery}
+              onChange={(event) => setFileQuery(event.target.value)}
+              placeholder="筛选文件…"
+              aria-label="筛选文件"
+            />
+          </label>
           {loadingFiles ? (
-            <p className="muted">加载中…</p>
+            <div className="editor-files-loading">
+              <span className="editor-inline-spinner" aria-hidden="true" />
+              <p className="muted">加载中…</p>
+            </div>
           ) : (
             <FileTree
-              nodes={fileTree}
+              nodes={visibleFileTree}
               selected={selected}
               selectedDir={selectedDir}
+              expandAll={Boolean(fileQuery.trim())}
+              emptyLabel={fileQuery.trim() ? '无匹配文件' : '暂无文件'}
               onSelectFile={(path) => {
                 setSelectedDir(null)
                 void handleSelect(path)
@@ -1318,38 +1435,60 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
             />
           )}
         </aside>
+        <div
+          className="editor-resize"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整文件栏宽度"
+          onPointerDown={onSidebarResizePointerDown}
+        />
         <div className="editor-pane">
-          {selected && !loadingFile && isMarkdownPath(selected) ? (
+          {selected ? (
             <div className="editor-pane-toolbar">
-              <div className="view-mode-toggle" role="group" aria-label="内容显示模式">
-                <button
-                  type="button"
-                  className={viewMode === 'preview' ? 'active' : undefined}
-                  onClick={() => setViewMode('preview')}
-                >
-                  预览
-                </button>
-                <button
-                  type="button"
-                  className={viewMode === 'split' ? 'active' : undefined}
-                  onClick={() => setViewMode('split')}
-                >
-                  分屏
-                </button>
-                <button
-                  type="button"
-                  className={viewMode === 'source' ? 'active' : undefined}
-                  onClick={() => setViewMode('source')}
-                >
-                  源码
-                </button>
+              <div className="editor-doc-id" title={selected}>
+                <FileKindGlyph path={selected} />
+                <span>{selected}</span>
+                {dirty ? <span className="editor-unsaved-dot" aria-label="未保存" /> : null}
               </div>
+              {!loadingFile && isMarkdownPath(selected) ? (
+                <div className="view-mode-toggle" role="group" aria-label="内容显示模式">
+                  <button
+                    type="button"
+                    className={viewMode === 'preview' ? 'active' : undefined}
+                    onClick={() => setViewMode('preview')}
+                  >
+                    <IconEye size={14} />
+                    预览
+                  </button>
+                  <button
+                    type="button"
+                    className={viewMode === 'split' ? 'active' : undefined}
+                    onClick={() => setViewMode('split')}
+                  >
+                    <IconColumns size={14} />
+                    分屏
+                  </button>
+                  <button
+                    type="button"
+                    className={viewMode === 'source' ? 'active' : undefined}
+                    onClick={() => setViewMode('source')}
+                  >
+                    <IconFileCode size={14} />
+                    源码
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {!selected ? (
-            <p className="muted">请选择左侧文件</p>
+            <div className="editor-pane-empty">
+              <p>从左侧选择一个文件开始编辑</p>
+            </div>
           ) : loadingFile ? (
-            <p className="muted">读取中…</p>
+            <div className="editor-pane-empty">
+              <span className="editor-inline-spinner" aria-hidden="true" />
+              <p className="muted">读取中…</p>
+            </div>
           ) : viewMode === 'split' && isMarkdownPath(selected) ? (
             <div className="editor-split-container">
               <div className="editor-split-pane">
@@ -1359,7 +1498,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
                   value={content}
                   onChange={(next) => {
                     setContent(next)
-                    setStatus('')
                   }}
                   aria-label={`编辑 ${selected}`}
                 />
@@ -1391,7 +1529,6 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
               value={content}
               onChange={(next) => {
                 setContent(next)
-                setStatus('')
               }}
               aria-label={`编辑 ${selected}`}
             />

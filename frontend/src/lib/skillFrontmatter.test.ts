@@ -1,5 +1,9 @@
 import {describe, expect, it} from 'vitest'
-import {descriptionFromFrontmatter, parseSkillFrontmatter} from './skillFrontmatter'
+import {
+  descriptionFromFrontmatter,
+  parseSkillFrontmatter,
+  splitSkillMeta,
+} from './skillFrontmatter'
 
 describe('parseSkillFrontmatter', () => {
   it('parses plain single-line fields', () => {
@@ -58,5 +62,30 @@ description: >
 ---
 `),
     ).toBe('hello world')
+  })
+})
+
+describe('splitSkillMeta', () => {
+  it('lifts name and description, then orders known chips', () => {
+    const split = splitSkillMeta({
+      name: 'archify',
+      description: 'Draw diagrams',
+      author: 'tt-a1i',
+      based_on: 'other',
+      license: 'MIT',
+      version: '2.14',
+    })
+    expect(split.name).toBe('archify')
+    expect(split.description).toBe('Draw diagrams')
+    expect(split.chips.map((c) => c.key)).toEqual([
+      'license',
+      'version',
+      'author',
+      'based_on',
+    ])
+  })
+
+  it('drops blank secondary fields', () => {
+    expect(splitSkillMeta({name: 'x', metadata: '  '}).chips).toEqual([])
   })
 })

@@ -1,5 +1,11 @@
 import {describe, expect, it} from 'vitest'
-import {ancestorDirPaths, buildFileTree, parentDirPath} from './fileTree'
+import {
+  ancestorDirPaths,
+  buildFileTree,
+  collectDirPaths,
+  filterFileTree,
+  parentDirPath,
+} from './fileTree'
 
 describe('buildFileTree', () => {
   it('builds nested dirs with files sorted dirs-first', () => {
@@ -49,5 +55,40 @@ describe('parentDirPath', () => {
   it('returns parent directory', () => {
     expect(parentDirPath('examples/bar/baz.md')).toBe('examples/bar')
     expect(parentDirPath('SKILL.md')).toBe('')
+  })
+})
+
+describe('collectDirPaths', () => {
+  it('lists every directory', () => {
+    const tree = buildFileTree(['examples/bar/baz.md', 'assets/a.html'])
+    expect(collectDirPaths(tree).sort()).toEqual(['assets', 'examples', 'examples/bar'])
+  })
+})
+
+describe('filterFileTree', () => {
+  const tree = buildFileTree([
+    'SKILL.md',
+    'bin/archify.mjs',
+    'examples/agent-run.json',
+    'examples/dataflow.html',
+  ])
+
+  it('returns original tree for blank query', () => {
+    expect(filterFileTree(tree, '  ')).toBe(tree)
+  })
+
+  it('keeps matching files and their ancestor dirs', () => {
+    const filtered = filterFileTree(tree, 'archify')
+    expect(filtered.map((n) => n.name)).toEqual(['bin'])
+    expect(filtered[0].children?.map((n) => n.name)).toEqual(['archify.mjs'])
+  })
+
+  it('keeps a whole folder when the folder name matches', () => {
+    const filtered = filterFileTree(tree, 'examples')
+    expect(filtered.map((n) => n.name)).toEqual(['examples'])
+    expect(filtered[0].children?.map((n) => n.name)).toEqual([
+      'agent-run.json',
+      'dataflow.html',
+    ])
   })
 })

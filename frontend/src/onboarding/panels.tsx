@@ -8,8 +8,11 @@ import {
   IconBulkToolLinks,
   IconCheck,
   IconChevron,
+  IconColumns,
   IconCopy,
   IconCopyPlus,
+  IconEye,
+  IconFileCode,
   IconFolderOpen,
   IconFolderPlus,
   IconFolderSync,
@@ -783,34 +786,50 @@ export function DemoSettings({tab}: {tab: 'general' | 'tools'}) {
 export function DemoEditor() {
   return (
     <div className="onboarding-demo onboarding-demo-editor editor-page" aria-hidden="true">
-      <div className="page-toolbar">
-        <button type="button" className="btn" tabIndex={-1}>
-          返回
-        </button>
-        <span className="editor-skill-id" title="code-review">
-          code-review
-        </span>
-        <div className="editor-lang-select">
-          <Select
-            size="sm"
-            value="zh-CN"
-            onChange={() => undefined}
-            options={[{value: 'zh-CN', label: '简体中文（默认）'}]}
-            ariaLabel="切换语言版本"
-          />
+      <header className="editor-chrome">
+        <div className="editor-chrome-left">
+          <button type="button" className="btn editor-back-btn" tabIndex={-1}>
+            <IconArrowLeft size={16} />
+            <span>返回</span>
+          </button>
+          <div className="editor-identity">
+            <h1 className="editor-skill-title" title="code-review">
+              code-review
+            </h1>
+          </div>
         </div>
-        <button type="button" className="btn btn-icon" tabIndex={-1} title="更改原版语言">
-          <IconPencil size={20} />
-        </button>
-        <button type="button" className="btn btn-primary" data-tour="demo-editor-save" tabIndex={-1}>
-          保存
-        </button>
-        <button type="button" className="btn btn-icon" tabIndex={-1} title="创建简体中文版本">
-          <IconCopyPlus size={22} />
-        </button>
-      </div>
+        <div className="editor-chrome-right">
+          <div className="editor-i18n">
+            <div className="editor-lang-select">
+              <Select
+                size="sm"
+                value="zh-CN"
+                onChange={() => undefined}
+                options={[{value: 'zh-CN', label: '简体中文（默认）'}]}
+                ariaLabel="切换语言版本"
+              />
+            </div>
+            <button type="button" className="btn btn-icon" tabIndex={-1} title="更改原版语言">
+              <IconPencil size={16} />
+            </button>
+            <button type="button" className="btn editor-create-version" tabIndex={-1}>
+              <IconCopyPlus size={16} />
+              <span>创建版本</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary editor-save-btn"
+            data-tour="demo-editor-save"
+            tabIndex={-1}
+          >
+            <IconSave size={15} />
+            <span>保存</span>
+          </button>
+        </div>
+      </header>
       <div className="editor-layout">
-        <aside className="editor-files">
+        <aside className="editor-files" style={{width: 240}}>
           <div className="editor-files-head">
             <div className="editor-files-title">文件</div>
             <div className="editor-files-actions">
@@ -835,19 +854,33 @@ export function DemoEditor() {
         </aside>
         <div className="editor-pane">
           <div className="editor-pane-toolbar">
+            <div className="editor-doc-id">
+              <span>SKILL.md</span>
+            </div>
             <div className="view-mode-toggle" role="group" aria-label="内容显示模式">
               <button type="button" className="active" tabIndex={-1}>
+                <IconEye size={14} />
                 预览
               </button>
               <button type="button" tabIndex={-1}>
+                <IconColumns size={14} />
                 分屏
               </button>
               <button type="button" tabIndex={-1}>
+                <IconFileCode size={14} />
                 源码
               </button>
             </div>
           </div>
           <div className="markdown-preview">
+            <header className="md-skill-masthead">
+              <p className="md-skill-name">code-review</p>
+              <div className="md-skill-desc">
+                <div className="md-skill-desc-copy">
+                  <p>按仓库规范做代码审查，在提交前指出风险与改进点。</p>
+                </div>
+              </div>
+            </header>
             <h1>代码审查</h1>
             <p>按仓库规范做代码审查，在提交前指出风险与改进点。</p>
           </div>

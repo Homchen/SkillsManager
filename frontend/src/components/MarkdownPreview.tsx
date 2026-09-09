@@ -1,4 +1,4 @@
-import {createElement, useMemo, type MouseEvent, type ReactNode} from 'react'
+import {createElement, useEffect, useMemo, useState, type MouseEvent, type ReactNode} from 'react'
 import Markdown, {type Components} from 'react-markdown'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github.css'
@@ -14,7 +14,7 @@ import {
   resolveSkillHref,
   type SkillHrefTarget,
 } from '../lib/skillRelativeHref'
-import {parseSkillFrontmatter} from '../lib/skillFrontmatter'
+import {parseSkillFrontmatter, splitSkillMeta} from '../lib/skillFrontmatter'
 
 export type DescriptionTranslateAction = {
   busy: boolean
@@ -45,7 +45,15 @@ export default function MarkdownPreview({
   files,
   onNavigateHref,
 }: Props) {
-  const {meta, body} = parseSkillFrontmatter(content)
+  const {meta, body} = useMemo(() => parseSkillFrontmatter(content), [content])
+  const {name, description, chips} = useMemo(() => splitSkillMeta(meta), [meta])
+  const [descExpanded, setDescExpanded] = useState(false)
+  const descLong = description.length > 160 || description.includes('\n')
+  const hasMeta = Boolean(name || description || chips.length > 0 || translatedDescription)
+
+  useEffect(() => {
+    setDescExpanded(false)
+  }, [content])
 
   const components = useMemo((): Components => {
     if (!currentPath || !onNavigateHref) return markdownComponents
@@ -85,56 +93,75 @@ export default function MarkdownPreview({
 
   return (
     <div className="markdown-preview" aria-label={ariaLabel}>
-      {Object.keys(meta).length > 0 ? (
-        <dl className="md-frontmatter">
-          {Object.entries(meta).map(([key, value]) => {
-            const showTranslate =
-              key === 'description' && Boolean(descriptionTranslate) && Boolean(value)
-            return (
-              <div key={key} className="md-frontmatter-row">
-                <dt>
-                  <span>{key}</span>
-                  {showTranslate && descriptionTranslate ? (
-                    <div className="md-frontmatter-action">
-                      <button
-                        type="button"
-                        className="md-frontmatter-action-link"
-                        disabled={
-                          descriptionTranslate.busy ||
-                          Boolean(descriptionTranslate.disabledReason)
-                        }
-                        aria-busy={descriptionTranslate.busy}
-                        title={
-                          descriptionTranslate.disabledReason ||
-                          (descriptionTranslate.busy
-                            ? '正在翻译 description…'
-                            : '按当前设置翻译 description')
-                        }
-                        onClick={() => descriptionTranslate.onClick()}
-                      >
-                        翻译 description
-                      </button>
-                      {descriptionTranslate.busy ? (
-                        <span
-                          className="md-frontmatter-spinner"
-                          role="status"
-                          aria-label="正在翻译"
-                        />
-                      ) : null}
-                    </div>
-                  ) : null}
-                </dt>
-                <dd>{value || '—'}</dd>
+      {hasMeta ? (
+        <header className="md-skill-masthead">
+          {name ? <p className="md-skill-name">{name}</p> : null}
+          {description ? (
+            <div className="md-skill-desc">
+              <div className="md-skill-desc-copy">
+                <p className={descLong && !descExpanded ? 'is-clamped' : undefined}>
+                  {description}
+                </p>
+                {descLong ? (
+                  <button
+                    type="button"
+                    className="md-skill-desc-more"
+                    onClick={() => setDescExpanded((open) => !open)}
+                  >
+                    {descExpanded ? '收起' : '展开'}
+                  </button>
+                ) : null}
               </div>
-            )
-          })}
-          {translatedDescription ? (
-            <div className="md-frontmatter-row md-frontmatter-translation">
-              <dt>翻译（{translatedDescription.language}）</dt>
-              <dd>{translatedDescription.text}</dd>
+              {descriptionTranslate ? (
+                <div className="md-frontmatter-action">
+                  <button
+                    type="button"
+                    className="md-frontmatter-action-link"
+                    disabled={
+                      descriptionTranslate.busy ||
+                      Boolean(descriptionTranslate.disabledReason)
+                    }
+                    aria-busy={descriptionTranslate.busy}
+                    title={
+                      descriptionTranslate.disabledReason ||
+                      (descriptionTranslate.busy
+                        ? '正在翻译 description…'
+                        : '按当前设置翻译 description')
+                    }
+                    onClick={() => descriptionTranslate.onClick()}
+                  >
+                    {descriptionTranslate.busy ? '翻译中…' : '翻译描述'}
+                  </button>
+                  {descriptionTranslate.busy ? (
+                    <span
+                      className="md-frontmatter-spinner"
+                      role="status"
+                      aria-label="正在翻译"
+                    />
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
-        </dl>
+          {translatedDescription ? (
+            <aside className="md-skill-translation">
+              <span className="md-skill-translation-lang">
+                {translatedDescription.language}
+              </span>
+              <p>{translatedDescription.text}</p>
+            </aside>
+          ) : null}
+          {chips.length > 0 ? (
+            <ul className="md-skill-chips">
+              {chips.map((chip) => (
+                <li key={chip.key} title={`${chip.key}: ${chip.value}`}>
+                  <span className="md-skill-chip-key">{chip.key}</span>
+                  <span className="md-skill-chip-value">{chip.value}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </header>
       ) : null}
       <Markdown
         remarkPlugins={markdownRemarkPlugins}

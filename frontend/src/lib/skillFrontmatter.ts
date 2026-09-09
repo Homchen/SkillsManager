@@ -122,3 +122,37 @@ export function parseSkillFrontmatter(text: string): {
 export function descriptionFromFrontmatter(text: string): string {
   return parseSkillFrontmatter(text).meta.description ?? ''
 }
+
+const PRIMARY_META_KEYS = new Set(['name', 'description'])
+const CHIP_ORDER = [
+  'license',
+  'version',
+  'author',
+  'compatibility',
+  'allowed-tools',
+  'metadata',
+]
+
+export type SkillMetaChip = {key: string; value: string}
+
+/** 把 frontmatter 拆成页眉主信息与次要标签，避免预览区被键值表占满。 */
+export function splitSkillMeta(meta: Record<string, string>): {
+  name: string
+  description: string
+  chips: SkillMetaChip[]
+} {
+  const name = meta.name?.trim() ?? ''
+  const description = meta.description?.trim() ?? ''
+  const rest = Object.entries(meta).filter(
+    ([key, value]) => !PRIMARY_META_KEYS.has(key) && value.trim() !== '',
+  )
+  rest.sort((a, b) => {
+    const ia = CHIP_ORDER.indexOf(a[0])
+    const ib = CHIP_ORDER.indexOf(b[0])
+    const da = ia === -1 ? CHIP_ORDER.length : ia
+    const db = ib === -1 ? CHIP_ORDER.length : ib
+    if (da !== db) return da - db
+    return a[0].localeCompare(b[0])
+  })
+  return {name, description, chips: rest.map(([key, value]) => ({key, value}))}
+}
