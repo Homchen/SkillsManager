@@ -710,6 +710,17 @@ body,
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1) !important;
 }
 
+.toolbar-icon-group .btn-icon:disabled {
+  opacity: 1;
+  cursor: progress;
+  color: var(--accent) !important;
+}
+
+.toolbar-icon-group .btn-icon:disabled:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 /* 分类标签导航栏（Pills） */
 .category-pills-bar {
   display: flex;
@@ -2382,7 +2393,8 @@ body.is-marquee-selecting * {
 @media (prefers-reduced-motion: reduce) {
   .editor-inline-spinner,
   .md-frontmatter-spinner,
-  .skills-spinner {
+  .skills-spinner,
+  .is-spinning {
     animation: none;
     border-top-color: var(--accent);
   }
@@ -10559,6 +10571,11 @@ body.is-marquee-selecting * {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+
+.is-spinning {
+  animation: spin 0.8s linear infinite;
+  transform-origin: center;
 }
 
 .btn-refresh .is-spinning {

@@ -344,9 +344,12 @@ export default function SkillsPage({
   const GROUP_ACTIONS_HIDE_MS = 2500
 
   const loadGenRef = useRef(0)
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: {showLoading?: boolean}) => {
     const gen = ++loadGenRef.current
     setError('')
+    if (opts?.showLoading) {
+      setLoading(true)
+    }
     try {
       const [list, cfg, groupList, usage] = await Promise.all([
         ListSkills(),
@@ -2232,11 +2235,13 @@ export default function SkillsPage({
               <button
                 type="button"
                 className="btn btn-icon"
-                onClick={() => void load()}
-                title="刷新技能列表"
-                aria-label="刷新技能列表"
+                onClick={() => void load({showLoading: true})}
+                title={loading ? '正在刷新技能列表' : '刷新技能列表'}
+                aria-label={loading ? '正在刷新技能列表' : '刷新技能列表'}
+                aria-busy={loading}
+                disabled={loading}
               >
-                <IconRefresh size={18} />
+                <IconRefresh size={18} className={loading ? 'is-spinning' : ''} />
               </button>
             </div>
           </div>
@@ -3512,9 +3517,11 @@ export default function SkillsPage({
           <span>松开以导入 skill 文件夹、zip 或 .skill 包</span>
         </div>
         {loading ? (
-          <div className="skills-loading-state">
+          <div className="skills-loading-state" role="status" aria-live="polite">
             <span className="skills-spinner" />
-            <p className="muted">正在加载技能与工具状态…</p>
+            <p className="muted">
+              {skills.length > 0 ? '正在刷新技能与工具状态…' : '正在加载技能与工具状态…'}
+            </p>
           </div>
         ) : showEmpty ? (
           <div className="empty-state">
