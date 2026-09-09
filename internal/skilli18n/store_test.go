@@ -1,10 +1,33 @@
 package skilli18n
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func TestInfoWithoutDefaultLanguageLanguagesNotNil(t *testing.T) {
+	s := New(t.TempDir())
+	info, err := s.Info("imported-without-lang")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.DefaultLanguage != "" {
+		t.Fatalf("default = %q, want empty", info.DefaultLanguage)
+	}
+	if info.Languages == nil {
+		t.Fatal("Languages is nil; JSON encodes as null and the editor crashes")
+	}
+	b, err := json.Marshal(info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(b, []byte(`"languages":[]`)) {
+		t.Fatalf("JSON = %s, want languages to be an empty array", b)
+	}
+}
 
 func TestTranslationRoot(t *testing.T) {
 	hub := filepath.Join(t.TempDir(), "skills")

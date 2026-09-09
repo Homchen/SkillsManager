@@ -131,7 +131,7 @@ func (s *Store) Info(id string) (Info, error) {
 	}
 	return Info{
 		DefaultLanguage:  meta.DefaultLanguage,
-		Languages:        append([]string(nil), meta.Languages...),
+		Languages:        append([]string{}, meta.Languages...),
 		TranslationCount: count,
 	}, nil
 }

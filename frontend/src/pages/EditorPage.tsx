@@ -35,6 +35,7 @@ import {findSkillFile, type SkillHrefTarget} from '../lib/skillRelativeHref'
 import {descriptionFromFrontmatter} from '../lib/skillFrontmatter'
 import {IconCheck, IconCopyPlus, IconPencil} from '../components/icons'
 import {SKILL_LANGUAGES, languageLabel} from '../lib/languages'
+import {skillLanguageSelectValues} from '../lib/skillI18n'
 import {Select} from '../components/Select'
 import {logClientWarn} from '../lib/clientLog'
 import type {SkillI18nInfo, TranslationTask} from '../types'
@@ -1159,7 +1160,7 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
                 ? '尚未设置原版语言，点击进行设置'
                 : undefined
             }
-            options={(i18n?.languages.length ? i18n.languages : [i18n?.defaultLanguage ?? '']).map(
+            options={skillLanguageSelectValues(i18n).map(
               (language) => ({
                 value: language,
                 label: (
