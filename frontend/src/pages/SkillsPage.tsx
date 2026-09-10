@@ -440,8 +440,9 @@ export default function SkillsPage({
   }
 
   useEffect(() => {
+    if (!active) return
     void load()
-  }, [load, reloadToken])
+  }, [load, reloadToken, active])
 
   useEffect(() => {
     if (!query.trim()) {
