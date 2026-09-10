@@ -29,6 +29,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import {ClipboardSetText, OnFileDrop, OnFileDropOff} from '../../wailsjs/runtime/runtime'
 import {AppToast, useAppToast} from '../components/AppToast'
+import SkillGrid, {type SkillGridHandle} from '../components/SkillGrid'
 import {Select} from '../components/Select'
 import {
   IconAlertTriangle,
@@ -344,6 +345,22 @@ export default function SkillsPage({
     height: number
   } | null>(null)
   const [marqueeHitIds, setMarqueeHitIds] = useState<Set<string> | null>(null)
+  const skillGridHandlesRef = useRef(new Map<string, SkillGridHandle>())
+  const skillGridBindersRef = useRef(new Map<string, (handle: SkillGridHandle | null) => void>())
+
+  function bindSkillGrid(key: string) {
+    const binders = skillGridBindersRef.current
+    let binder = binders.get(key)
+    if (!binder) {
+      binder = (handle) => {
+        const map = skillGridHandlesRef.current
+        if (handle) map.set(key, handle)
+        else map.delete(key)
+      }
+      binders.set(key, binder)
+    }
+    return binder
+  }
 
   const LONG_PRESS_MS = 500
   const MOVE_THRESHOLD_PX = 8
@@ -974,22 +991,10 @@ export default function SkillsPage({
   }
 
   function hitSkillIdsInBox(box: {left: number; top: number; right: number; bottom: number}) {
-    const root = listAreaRef.current
-    if (!root) return [] as string[]
     const ids: string[] = []
-    root.querySelectorAll<HTMLElement>('[data-skill-id]').forEach((el) => {
-      const id = el.dataset.skillId
-      if (!id) return
-      const r = el.getBoundingClientRect()
-      if (
-        r.left < box.right &&
-        r.right > box.left &&
-        r.top < box.bottom &&
-        r.bottom > box.top
-      ) {
-        ids.push(id)
-      }
-    })
+    for (const handle of skillGridHandlesRef.current.values()) {
+      ids.push(...handle.hitIds(box))
+    }
     return ids
   }
 
@@ -3733,14 +3738,28 @@ export default function SkillsPage({
                     </div>
                   </div>
                   {collapsed ? null : (
-                    <div className="skill-grid">{sec.skills.map(renderSkillCard)}</div>
+                    <SkillGrid
+                      ref={bindSkillGrid(sec.id)}
+                      items={sec.skills}
+                      getId={(s) => s.id}
+                      renderItem={renderSkillCard}
+                      pinnedId={openMenuId}
+                      marqueeBox={marqueeBox}
+                    />
                   )}
                 </section>
               )
             })}
           </div>
         ) : (
-          <div className="skill-grid">{filtered.map(renderSkillCard)}</div>
+          <SkillGrid
+            ref={bindSkillGrid('flat')}
+            items={filtered}
+            getId={(s) => s.id}
+            renderItem={renderSkillCard}
+            pinnedId={openMenuId}
+            marqueeBox={marqueeBox}
+          />
         )}
       </div>
       {marqueeBox ? (

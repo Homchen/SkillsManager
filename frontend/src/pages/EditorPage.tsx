@@ -38,6 +38,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import {findSkillFile, type SkillHrefTarget} from '../lib/skillRelativeHref'
 import {descriptionFromFrontmatter} from '../lib/skillFrontmatter'
+import {SPLIT_PREVIEW_DEBOUNCE_MS} from '../lib/debounceDelay'
 import {IconArrowLeft, IconCheck, IconColumns, IconCopyPlus, IconEye, IconFileCode, IconPencil, IconSave, IconSearch} from '../components/icons'
 import {SKILL_LANGUAGES, languageLabel} from '../lib/languages'
 import {skillLanguageSelectValues} from '../lib/skillI18n'
@@ -132,10 +133,13 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
   const [selected, setSelected] = useState<string | null>(null)
   const [selectedDir, setSelectedDir] = useState<string | null>(null)
   const [content, setContent] = useState('')
+  const [previewContent, setPreviewContent] = useState('')
+  const previewSelectedRef = useRef(selected)
   const [savedContent, setSavedContent] = useState('')
   const [error, setError] = useState('')
   const [loadingFiles, setLoadingFiles] = useState(true)
   const [loadingFile, setLoadingFile] = useState(false)
+  const previewLoadingRef = useRef(loadingFile)
   const [saving, setSaving] = useState(false)
   const [creatingEntry, setCreatingEntry] = useState(false)
   const [createEntryKind, setCreateEntryKind] = useState<'file' | 'dir' | null>(null)
@@ -233,6 +237,23 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
     setConfirmPrompt(null)
     void loadI18n()
   }, [loadI18n])
+
+  useEffect(() => {
+    const fileChanged = previewSelectedRef.current !== selected
+    const finishedLoading = previewLoadingRef.current && !loadingFile
+    previewSelectedRef.current = selected
+    previewLoadingRef.current = loadingFile
+    if (viewMode !== 'split' || loadingFile || fileChanged || finishedLoading) {
+      setPreviewContent(content)
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setPreviewContent(content)
+    }, SPLIT_PREVIEW_DEBOUNCE_MS)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [content, viewMode, loadingFile, selected])
 
   useEffect(() => {
     let cancelled = false
@@ -1504,7 +1525,7 @@ const EditorPage = forwardRef<EditorPageHandle, Props>(function EditorPage(
               </div>
               <div className="editor-split-pane">
                 <MarkdownPreview
-                  content={content}
+                  content={previewContent}
                   translatedDescription={translation}
                   descriptionTranslate={
                     isSkillMD

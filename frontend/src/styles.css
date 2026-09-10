@@ -1454,6 +1454,17 @@ body.is-marquee-selecting * {
   user-select: none !important;
 }
 
+.skill-grid-window {
+  position: relative;
+  min-width: 0;
+}
+
+.skill-grid-pin {
+  position: absolute;
+  z-index: 30;
+  box-sizing: border-box;
+}
+
 .skill-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));

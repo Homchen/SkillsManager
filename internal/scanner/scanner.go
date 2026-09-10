@@ -306,17 +306,17 @@ func visitEntry(root, toolID string, isHub bool, path string, d os.DirEntry, byI
 	if isHub {
 		kind = domain.KindHub
 	}
-		addLocation(byID, id, domain.SkillLocation{
-			ToolID: toolID,
-			Path:   path,
-			Kind:   kind,
-		})
-		if isHub {
-			e := byID[id]
-			e.HubPath = path
-		}
-		return filepath.SkipDir
+	addLocation(byID, id, domain.SkillLocation{
+		ToolID: toolID,
+		Path:   path,
+		Kind:   kind,
+	})
+	if isHub {
+		e := byID[id]
+		e.HubPath = path
 	}
+	return filepath.SkipDir
+}
 
 func recordSymlink(root, toolID, path string, byID map[string]*domain.SkillEntry) error {
 	id, err := skillIDForScan(root, toolID, path)
@@ -439,7 +439,7 @@ func deriveStatus(e *domain.SkillEntry) domain.SkillStatus {
 			roots = append(roots, hubPath)
 		}
 		roots = append(roots, realPaths...)
-		if fsutil.SkillDirsContentDiffer(roots) {
+		if fsutil.SkillDirsStatDiffer(roots) {
 			return domain.StatusConflict
 		}
 		return domain.StatusRealCopyOnly
