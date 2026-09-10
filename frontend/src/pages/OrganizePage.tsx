@@ -478,6 +478,7 @@ export default function OrganizePage({onBack}: Props) {
     setExecuting(true)
     setError('')
     try {
+      await planCommitRef.current
       const gate = normalizeCanExecute(await CanExecuteOrganize())
       if (!gate.ok) {
         setCanExecute(false)
