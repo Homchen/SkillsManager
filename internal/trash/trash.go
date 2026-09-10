@@ -14,6 +14,10 @@ import (
 
 var ErrTargetExists = errors.New("目标已存在")
 
+// I18nDirName is the per-bucket sidecar that holds trashed translation trees.
+// List skips it so language copies are not shown as separate trash items.
+const I18nDirName = "_i18n"
+
 type Store struct {
 	Hub string
 }
@@ -25,6 +29,11 @@ func (s *Store) root() string { return filepath.Join(s.Hub, "_trash") }
 func (s *Store) Move(src string) (string, error) {
 	ts := time.Now().Format("20060102-150405")
 	bucket := filepath.Join(s.root(), ts)
+	if _, err := os.Stat(bucket); err == nil {
+		bucket = filepath.Join(s.root(), ts+fmt.Sprintf("-%d", time.Now().UnixNano()))
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
 
 	relID := filepath.Base(src)
 	if absSrc, err := filepath.Abs(src); err == nil {
@@ -52,6 +61,28 @@ func (s *Store) Move(src string) (string, error) {
 		return "", err
 	}
 	return dest, nil
+}
+
+// I18nSidecar is hub/_trash/<ts>/_i18n/<skill-id>.
+func I18nSidecar(bucket, skillID string) string {
+	return filepath.Join(bucket, I18nDirName, skillID)
+}
+
+// BucketDir returns the timestamp folder that contains trashPath.
+func (s *Store) BucketDir(trashPath string) (string, error) {
+	abs, err := s.validateTrashPath(trashPath)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(s.root(), abs)
+	if err != nil {
+		return "", err
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) == 0 || parts[0] == "" || parts[0] == "." {
+		return "", fmt.Errorf("无效的回收站条目")
+	}
+	return filepath.Join(s.root(), parts[0]), nil
 }
 
 func (s *Store) validateTrashPath(trashPath string) (string, error) {
@@ -104,6 +135,9 @@ func (s *Store) List(retentionDays int) ([]domain.TrashItem, error) {
 			if err != nil || d == nil || !d.IsDir() {
 				return err
 			}
+			if d.Name() == I18nDirName {
+				return filepath.SkipDir
+			}
 			if _, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil {
 				return nil
 			}
@@ -130,22 +164,30 @@ func (s *Store) List(retentionDays int) ([]domain.TrashItem, error) {
 }
 
 func (s *Store) Restore(trashPath string, overwrite bool) error {
+	_, err := s.RestoreWithDisplaced(trashPath, overwrite)
+	return err
+}
+
+// RestoreWithDisplaced restores a trash skill to the hub.
+// When overwrite is true and the hub destination exists, that skill is moved
+// into a new trash bucket and its path is returned as displaced.
+func (s *Store) RestoreWithDisplaced(trashPath string, overwrite bool) (string, error) {
 	abs, err := s.validateTrashPath(trashPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	// 找到所属 bucket：_trash/<ts>/...
 	relToRoot, err := filepath.Rel(s.root(), abs)
 	if err != nil {
-		return err
+		return "", err
 	}
 	parts := strings.Split(filepath.ToSlash(relToRoot), "/")
 	if len(parts) < 2 {
-		return fmt.Errorf("无效的回收站条目")
+		return "", fmt.Errorf("无效的回收站条目")
 	}
 	id := strings.Join(parts[1:], "/")
 	if id == "" || strings.Contains(id, "..") {
-		return fmt.Errorf("skill id 非法: %s", id)
+		return "", fmt.Errorf("skill id 非法: %s", id)
 	}
 	leaf := parts[len(parts)-1]
 	var hubDest string
@@ -164,27 +206,29 @@ func (s *Store) Restore(trashPath string, overwrite bool) error {
 			}
 		}
 	}
+	var displaced string
 	if _, err := os.Lstat(hubDest); err == nil {
 		if !overwrite {
-			return ErrTargetExists
+			return "", ErrTargetExists
 		}
-		if _, err := s.Move(hubDest); err != nil {
-			return err
+		displaced, err = s.Move(hubDest)
+		if err != nil {
+			return "", err
 		}
 	} else if err != nil && !os.IsNotExist(err) {
-		return err
+		return "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(hubDest), 0o755); err != nil {
-		return err
+		return "", err
 	}
 	if err := os.Rename(abs, hubDest); err != nil {
-		return err
+		return "", err
 	}
 	parent := filepath.Dir(abs)
 	if ents, err := os.ReadDir(parent); err == nil && len(ents) == 0 {
 		_ = os.Remove(parent)
 	}
-	return nil
+	return displaced, nil
 }
 
 func (s *Store) PurgeEntry(trashPath string) error {
@@ -192,22 +236,32 @@ func (s *Store) PurgeEntry(trashPath string) error {
 	if err != nil {
 		return err
 	}
+	bucket, err := s.BucketDir(abs)
+	if err != nil {
+		return err
+	}
+	sidecar := I18nSidecar(bucket, filepath.Base(abs))
 	if err := os.RemoveAll(abs); err != nil {
 		return err
 	}
-	// 向上清理空目录，直到（但不删除）trash root hub/_trash
+	_ = os.RemoveAll(sidecar)
+	s.pruneEmptyToRoot(filepath.Dir(abs))
+	s.pruneEmptyToRoot(filepath.Dir(sidecar))
+	return nil
+}
+
+func (s *Store) pruneEmptyToRoot(start string) {
 	root, err := filepath.Abs(s.root())
 	if err != nil {
-		return nil
+		return
 	}
 	root = filepath.Clean(root)
-	dir := filepath.Dir(abs)
+	dir := start
 	for {
 		d := filepath.Clean(dir)
 		if strings.EqualFold(d, root) {
 			break
 		}
-		// 安全：不得越过 trash root
 		rel, err := filepath.Rel(root, d)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 			break
@@ -221,7 +275,6 @@ func (s *Store) PurgeEntry(trashPath string) error {
 		}
 		dir = filepath.Dir(d)
 	}
-	return nil
 }
 
 func parseBucketTime(name string) time.Time {

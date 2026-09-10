@@ -482,27 +482,44 @@ func (s *Store) RemoveAll(id string) error {
 	return nil
 }
 
+// CanRename reports whether Rename(oldID, newID) would succeed without moving files.
+func (s *Store) CanRename(oldID, newID string) error {
+	_, _, skip, err := s.renamePlan(oldID, newID)
+	if skip {
+		return nil
+	}
+	return err
+}
+
 // Rename moves the translation tree when a skill id changes.
 func (s *Store) Rename(oldID, newID string) error {
-	oldID = fsutil.NormalizeSkillID(oldID)
-	newID = fsutil.NormalizeSkillID(newID)
-	src := s.SkillDir(oldID)
-	if _, err := os.Stat(src); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	dst := s.SkillDir(newID)
-	if _, err := os.Stat(dst); err == nil {
-		return fmt.Errorf("翻译仓中已存在 skill：%s", newID)
-	} else if !os.IsNotExist(err) {
+	src, dst, skip, err := s.renamePlan(oldID, newID)
+	if skip || err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
 	return os.Rename(src, dst)
+}
+
+func (s *Store) renamePlan(oldID, newID string) (src, dst string, skip bool, err error) {
+	oldID = fsutil.NormalizeSkillID(oldID)
+	newID = fsutil.NormalizeSkillID(newID)
+	src = s.SkillDir(oldID)
+	if _, err := os.Stat(src); err != nil {
+		if os.IsNotExist(err) {
+			return "", "", true, nil
+		}
+		return "", "", false, err
+	}
+	dst = s.SkillDir(newID)
+	if _, err := os.Stat(dst); err == nil {
+		return src, dst, false, fmt.Errorf("翻译仓中已存在 skill：%s", newID)
+	} else if !os.IsNotExist(err) {
+		return src, dst, false, err
+	}
+	return src, dst, false, nil
 }
 
 func (s *Store) listVersionDirs(id string) ([]string, error) {
@@ -560,27 +577,28 @@ func containsLang(langs []string, want string) bool {
 	return false
 }
 
+// CheckMigrateRoot reports whether MigrateRoot would succeed without moving files.
+func CheckMigrateRoot(oldHub, newHub string) error {
+	_, newRoot, skip, err := migrateRootPlan(oldHub, newHub)
+	if skip || err != nil {
+		return err
+	}
+	return checkMigrateDest(newRoot)
+}
+
 // MigrateRoot moves skills_translation when the hub path changes.
 func MigrateRoot(oldHub, newHub string) error {
-	oldHub = strings.TrimSpace(oldHub)
-	newHub = strings.TrimSpace(newHub)
-	if oldHub == "" || newHub == "" {
-		return nil
+	oldRoot, newRoot, skip, err := migrateRootPlan(oldHub, newHub)
+	if skip || err != nil {
+		return err
 	}
-	oldRoot := filepath.Join(filepath.Dir(oldHub), DirName)
-	newRoot := filepath.Join(filepath.Dir(newHub), DirName)
-	if filepath.Clean(oldRoot) == filepath.Clean(newRoot) {
-		return nil
-	}
-	if _, err := os.Stat(oldRoot); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
+	if err := checkMigrateDest(newRoot); err != nil {
 		return err
 	}
 	if _, err := os.Stat(newRoot); err == nil {
-		// Destination already has a translation repo; leave the old one in place.
-		return nil
+		if err := os.Remove(newRoot); err != nil {
+			return err
+		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -588,4 +606,45 @@ func MigrateRoot(oldHub, newHub string) error {
 		return err
 	}
 	return os.Rename(oldRoot, newRoot)
+}
+
+func migrateRootPlan(oldHub, newHub string) (oldRoot, newRoot string, skip bool, err error) {
+	oldHub = strings.TrimSpace(oldHub)
+	newHub = strings.TrimSpace(newHub)
+	if oldHub == "" || newHub == "" {
+		return "", "", true, nil
+	}
+	oldRoot = filepath.Join(filepath.Dir(oldHub), DirName)
+	newRoot = filepath.Join(filepath.Dir(newHub), DirName)
+	if filepath.Clean(oldRoot) == filepath.Clean(newRoot) {
+		return oldRoot, newRoot, true, nil
+	}
+	if _, err := os.Stat(oldRoot); err != nil {
+		if os.IsNotExist(err) {
+			return oldRoot, newRoot, true, nil
+		}
+		return oldRoot, newRoot, false, err
+	}
+	return oldRoot, newRoot, false, nil
+}
+
+func checkMigrateDest(newRoot string) error {
+	st, err := os.Stat(newRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if !st.IsDir() {
+		return fmt.Errorf("目标位置已有翻译仓（%s），请先处理后再迁移源仓", newRoot)
+	}
+	ents, err := os.ReadDir(newRoot)
+	if err != nil {
+		return err
+	}
+	if len(ents) == 0 {
+		return nil
+	}
+	return fmt.Errorf("目标位置已有翻译仓（%s），请先处理后再迁移源仓", newRoot)
 }

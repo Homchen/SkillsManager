@@ -343,3 +343,52 @@ func TestRestoreOverwriteOnlyMovesHubDest(t *testing.T) {
 		t.Fatalf("overwrite must not trash other group: %q err=%v", b, err)
 	}
 }
+
+func TestListSkipsI18nSidecar(t *testing.T) {
+	hub := t.TempDir()
+	st := New(hub)
+	src := filepath.Join(hub, domain.DefaultGroup, "demo")
+	writeSkill(t, src, "hub")
+	dest, err := st.Move(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := st.BucketDir(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSkill(t, filepath.Join(I18nSidecar(bucket, "demo"), "en"), "en")
+	items, err := st.List(7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("list=%d, want 1 hub skill (i18n sidecar hidden)", len(items))
+	}
+	if filepath.Base(items[0].ID) != "demo" {
+		t.Fatalf("id=%q", items[0].ID)
+	}
+}
+
+func TestPurgeEntryRemovesI18nSidecar(t *testing.T) {
+	hub := t.TempDir()
+	st := New(hub)
+	src := filepath.Join(hub, domain.DefaultGroup, "demo")
+	writeSkill(t, src, "hub")
+	dest, err := st.Move(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := st.BucketDir(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sidecar := I18nSidecar(bucket, "demo")
+	writeSkill(t, filepath.Join(sidecar, "en"), "en")
+	if err := st.PurgeEntry(dest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(sidecar); !os.IsNotExist(err) {
+		t.Fatal("expected i18n sidecar purged")
+	}
+}

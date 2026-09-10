@@ -115,7 +115,7 @@ export function findSettingsSaveIssue(cfg: SettingsSaveInput): SettingsSaveIssue
 
 /** 把后端保存错误尽量对到具体设置项；对不上则只展示文案。 */
 export function mapSaveConfigError(message: string): SettingsSaveIssue | null {
-  if (message.includes('源仓')) {
+  if (message.includes('翻译仓') || message.includes('源仓')) {
     return {field: 'hubPath', message}
   }
   if (message.includes('语言')) {

@@ -36,7 +36,7 @@ func TestDeleteMovesToTrash(t *testing.T) {
 	hub := t.TempDir()
 	r := New(hub, trash.New(hub))
 	_ = r.Create("gone", "Gone", "")
-	if err := r.Delete("gone"); err != nil {
+	if _, err := r.Delete("gone"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(hub, "default", "gone")); !os.IsNotExist(err) {

@@ -276,6 +276,9 @@ func (a *appCore) SaveConfig(cfg config.Config) error {
 				toolRoots = append(toolRoots, p)
 			}
 		}
+		if err := skilli18n.CheckMigrateRoot(oldHub, newHub); err != nil {
+			return userErr(fmt.Errorf("迁移翻译仓失败: %w", err))
+		}
 		if hubmigrate.NeedsContentMigrate(oldHub) {
 			if err := a.requireElevated(); err != nil {
 				return userErr(fmt.Errorf("迁移源仓需要管理员权限: %w", err))
@@ -589,7 +592,7 @@ func (a *appCore) CreateSkill(id, name, group, language string) error {
 		return userErr(err)
 	}
 	if err := a.i18n().InitDefault(id, language); err != nil {
-		_ = a.repo().Delete(id)
+		_, _ = a.repo().Delete(id)
 		return userErr(err)
 	}
 	return nil
@@ -726,31 +729,60 @@ func (a *appCore) RenameSkill(oldID, newID string) error {
 			return err
 		}
 	}
+	if err := a.i18n().CanRename(oldID, newID); err != nil {
+		return userErr(err)
+	}
 	if err := a.repo().Rename(oldID, newID); err != nil {
 		return userErr(err)
 	}
 	if err := a.i18n().Rename(oldID, newID); err != nil {
-		return userErr(err)
+		return userErr(a.rollbackSkillRename(oldID, newID, false, err))
 	}
 	path, err := a.resolveHubSkillPath(newID)
 	if err != nil {
-		return userErr(err)
+		return userErr(a.rollbackSkillRename(oldID, newID, true, err))
 	}
-	return userErr(relinkSkillAfterRename(a.cfg, oldID, newID, path, priv.IsElevated()))
+	if err := relinkSkillAfterRename(a.cfg, oldID, newID, path, a.isElevated()); err != nil {
+		return userErr(a.rollbackSkillRename(oldID, newID, true, err))
+	}
+	return nil
+}
+
+func (a *appCore) rollbackSkillRename(oldID, newID string, i18nMoved bool, cause error) error {
+	if i18nMoved {
+		if err := a.i18n().Rename(newID, oldID); err != nil {
+			return fmt.Errorf("%w；回滚翻译仓失败: %v", cause, err)
+		}
+	}
+	if err := a.repo().Rename(newID, oldID); err != nil {
+		return fmt.Errorf("%w；回滚源仓失败: %v", cause, err)
+	}
+	if !i18nMoved {
+		return cause
+	}
+	path, err := a.resolveHubSkillPath(oldID)
+	if err != nil {
+		return fmt.Errorf("%w；回滚后定位源仓失败: %v", cause, err)
+	}
+	if err := relinkSkillAfterRename(a.cfg, newID, oldID, path, a.isElevated()); err != nil {
+		return fmt.Errorf("%w；回滚工具链接失败: %v", cause, err)
+	}
+	return cause
 }
 
 // DeleteSkill removes related tool symlinks then moves the hub skill into trash.
-// All translation versions under skills_translation are permanently removed.
+// Translation versions under skills_translation are moved into the same trash bucket.
 func (a *appCore) DeleteSkill(id string) error {
 	if err := unlinkSkillToolLinks(a.cfg, id); err != nil {
 		return userErr(err)
 	}
-	if err := a.repo().Delete(id); err != nil {
+	trashPath, err := a.repo().Delete(id)
+	if err != nil {
 		return userErr(err)
 	}
-	if err := a.i18n().RemoveAll(id); err != nil {
+	if err := moveI18nToTrashSidecar(a.cfg.HubPath, id, trashPath); err != nil {
 		a.purgeTrash()
-		return userErr(fmt.Errorf("已移入回收站，但删除翻译版本失败: %w", err))
+		return userErr(fmt.Errorf("已移入回收站，但翻译版本未能一并移入: %w", err))
 	}
 	a.purgeTrash()
 	return nil
@@ -770,8 +802,17 @@ func (a *appCore) ListTrash() ([]domain.TrashItem, error) {
 
 // RestoreTrash moves a trash entry back to the hub. overwrite replaces an existing hub skill
 // by moving it into trash first. Does not recreate tool symlinks.
+// Translation sidecars in the same trash bucket are restored beside the hub.
 func (a *appCore) RestoreTrash(trashPath string, overwrite bool) error {
-	return userErr(trash.New(a.cfg.HubPath).Restore(trashPath, overwrite))
+	tr := trash.New(a.cfg.HubPath)
+	displaced, err := tr.RestoreWithDisplaced(trashPath, overwrite)
+	if err != nil {
+		return userErr(err)
+	}
+	if err := restoreI18nFromTrashSidecar(a.cfg.HubPath, trashPath, displaced); err != nil {
+		return userErr(err)
+	}
+	return nil
 }
 
 // PurgeTrash permanently deletes one trash entry.

@@ -109,13 +109,12 @@ func (r *Repo) Rename(oldID, newID string) error {
 	return os.Rename(src, dst)
 }
 
-func (r *Repo) Delete(id string) error {
+func (r *Repo) Delete(id string) (string, error) {
 	_, abs, err := r.Find(id)
 	if err != nil {
-		return err
+		return "", err
 	}
-	_, err = r.Trash.Move(abs)
-	return err
+	return r.Trash.Move(abs)
 }
 
 func (r *Repo) ListFiles(id string) ([]string, error) {

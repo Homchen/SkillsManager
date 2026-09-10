@@ -108,6 +108,12 @@ describe('settings field helpers', () => {
     })
   })
 
+  it('maps translation-repo migrate errors to hubPath', () => {
+    expect(mapSaveConfigError('迁移翻译仓失败: 目标位置已有翻译仓')).toMatchObject({
+      field: 'hubPath',
+    })
+  })
+
   it('leaves unmapped backend errors without a field', () => {
     expect(mapSaveConfigError('磁盘已满')).toBeNull()
   })

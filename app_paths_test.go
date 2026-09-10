@@ -55,7 +55,7 @@ func TestUnlinkSkillToolLinksBeforeDelete(t *testing.T) {
 	if _, err := os.Lstat(linkPath); !os.IsNotExist(err) {
 		t.Fatalf("tool symlink should be removed, err=%v", err)
 	}
-	if err := repo.Delete("demo"); err != nil {
+	if _, err := repo.Delete("demo"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(hubSkill); !os.IsNotExist(err) {

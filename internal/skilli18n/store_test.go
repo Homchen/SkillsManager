@@ -261,3 +261,113 @@ func TestReconcilePrunesMissingDirs(t *testing.T) {
 		t.Fatalf("languages missing ja: %v", info.Languages)
 	}
 }
+
+func TestRenameNoopWhenSourceMissing(t *testing.T) {
+	s := New(t.TempDir())
+	if err := s.CanRename("missing", "next"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rename("missing", "next"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRenameConflictWhenDestExists(t *testing.T) {
+	hub := t.TempDir()
+	s := New(hub)
+	if err := s.InitDefault("old", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.InitDefault("taken", "en"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CanRename("old", "taken"); err == nil {
+		t.Fatal("expected dest conflict")
+	}
+	if err := s.Rename("old", "taken"); err == nil {
+		t.Fatal("expected dest conflict")
+	}
+	if _, err := os.Stat(s.SkillDir("old")); err != nil {
+		t.Fatalf("source should remain: %v", err)
+	}
+}
+
+func TestMigrateRootMovesWhenDestMissing(t *testing.T) {
+	root := t.TempDir()
+	oldHub := filepath.Join(root, "old", "skills")
+	newHub := filepath.Join(root, "new", "skills")
+	s := New(oldHub)
+	if err := s.InitDefault("demo", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckMigrateRoot(oldHub, newHub); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateRoot(oldHub, newHub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(s.Root()); !os.IsNotExist(err) {
+		t.Fatal("old translation root should be gone")
+	}
+	moved := New(newHub)
+	if _, err := os.Stat(moved.MetaPath("demo")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMigrateRootEmptyDestIsReplaced(t *testing.T) {
+	root := t.TempDir()
+	oldHub := filepath.Join(root, "old", "skills")
+	newHub := filepath.Join(root, "new", "skills")
+	s := New(oldHub)
+	if err := s.InitDefault("demo", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	empty := New(newHub).Root()
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateRoot(oldHub, newHub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(New(newHub).MetaPath("demo")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMigrateRootNonEmptyDestErrors(t *testing.T) {
+	root := t.TempDir()
+	oldHub := filepath.Join(root, "old", "skills")
+	newHub := filepath.Join(root, "new", "skills")
+	if err := New(oldHub).InitDefault("demo", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	dest := New(newHub)
+	if err := dest.InitDefault("other", "en"); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckMigrateRoot(oldHub, newHub); err == nil {
+		t.Fatal("expected non-empty dest error")
+	}
+	if err := MigrateRoot(oldHub, newHub); err == nil {
+		t.Fatal("expected non-empty dest error")
+	}
+	if _, err := os.Stat(New(oldHub).MetaPath("demo")); err != nil {
+		t.Fatalf("old translation repo should stay: %v", err)
+	}
+	if _, err := os.Stat(dest.MetaPath("other")); err != nil {
+		t.Fatalf("dest translation repo should stay: %v", err)
+	}
+}
+
+func TestMigrateRootNoopWhenOldMissing(t *testing.T) {
+	root := t.TempDir()
+	oldHub := filepath.Join(root, "old", "skills")
+	newHub := filepath.Join(root, "new", "skills")
+	if err := CheckMigrateRoot(oldHub, newHub); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateRoot(oldHub, newHub); err != nil {
+		t.Fatal(err)
+	}
+}

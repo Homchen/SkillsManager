@@ -3846,12 +3846,12 @@ export default function SkillsPage({
                   <strong>{confirmDialog.skill.name || confirmDialog.skill.id}</strong>
                   {' '}？将移入回收站
                   {(confirmDialog.skill.translationCount ?? 0) > 0
-                    ? `；同时会永久删除其 ${confirmDialog.skill.translationCount} 个翻译版本`
+                    ? `；其 ${confirmDialog.skill.translationCount} 个翻译版本将一并移入回收站，恢复时可还原`
                     : ''}
                   。
                 </>
               ) : confirmDialog.kind === 'delete-skills-batch' ? (
-                `确认将 ${selectedIds.size} 个技能移入回收站？若含翻译版本，将一并永久删除。`
+                `确认将 ${selectedIds.size} 个技能移入回收站？翻译版本会一并移入，恢复时可还原。`
               ) : confirmDialog.kind === 'delete-group' ? (
                 <>
                   删除分组后，其中的技能将回到{' '}
@@ -3861,7 +3861,7 @@ export default function SkillsPage({
               ) : confirmDialog.kind === 'restore-overwrite' ? (
                 <>
                   <strong>{confirmDialog.item.name || confirmDialog.item.id}</strong>
-                  {' '}在源仓已存在。覆盖后，现有副本将再移入回收站。
+                  {' '}在源仓已存在。覆盖后，现有副本（含译本）将再移入回收站。
                 </>
               ) : (
                 <>
