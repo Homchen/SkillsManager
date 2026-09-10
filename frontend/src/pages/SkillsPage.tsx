@@ -20,6 +20,7 @@ import {
   RenameGroup,
   RenameSkill,
   RevealInFolder,
+  RequestElevation,
   RestoreTrash,
   SetCollapsedSkillGroups,
   SetSkillsLayout,
@@ -77,6 +78,7 @@ import {
 } from '../lib/assignGroup'
 import {formatEnableDelta, toolPresence, toolPresenceLabel} from '../lib/skillToolLinks'
 import {formatUsageLabel} from '../lib/skillUsage'
+import {rootLayoutSkillCount, shouldPromptRootLayoutMigrate} from '../lib/rootLayout'
 import {getSkillAvatarTheme} from '../lib/skillAvatar'
 import {getToolBadge} from '../lib/toolBadge'
 
@@ -245,6 +247,10 @@ export default function SkillsPage({
   const [createLanguage, setCreateLanguage] = useState('zh-CN')
   const [creating, setCreating] = useState(false)
   const [dialogError, setDialogError] = useState('')
+  const [rootMigrateOpen, setRootMigrateOpen] = useState(false)
+  const [rootMigrating, setRootMigrating] = useState(false)
+  const [rootMigrateError, setRootMigrateError] = useState('')
+  const rootLayoutSkippedRef = useRef(false)
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignSkill, setAssignSkill] = useState<SkillEntry | null>(null)
   const [assignBatch, setAssignBatch] = useState(false)
@@ -443,6 +449,38 @@ export default function SkillsPage({
     if (!active) return
     void load()
   }, [load, reloadToken, active])
+
+  useEffect(() => {
+    if (!active || loading) return
+    if (
+      !shouldPromptRootLayoutMigrate({
+        skills,
+        elevated: false,
+        skippedThisSession: rootLayoutSkippedRef.current,
+      })
+    ) {
+      setRootMigrateOpen(false)
+      return
+    }
+    let cancelled = false
+    void IsElevated()
+      .then((elevated) => {
+        if (cancelled) return
+        setRootMigrateOpen(
+          shouldPromptRootLayoutMigrate({
+            skills,
+            elevated,
+            skippedThisSession: rootLayoutSkippedRef.current,
+          }),
+        )
+      })
+      .catch(() => {
+        // 无法判断权限时不打断列表
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [active, loading, skills])
 
   useEffect(() => {
     if (!query.trim()) {
@@ -2118,10 +2156,19 @@ export default function SkillsPage({
               <span className="badge unlinked">未接入工具</span>
             )}
           </div>
-          {skill.status !== 'normal' ? (
-            <span className={`badge status-${skill.status}`} title={STATUS_LABELS[skill.status]}>
-              {STATUS_LABELS[skill.status] ?? skill.status}
-            </span>
+          {(skill.rootLayout || skill.status !== 'normal') ? (
+            <div className="skill-meta-flags">
+              {skill.rootLayout ? (
+                <span className="badge root-layout" title="仍在源仓根目录，提权后可迁入默认分组">
+                  待迁移
+                </span>
+              ) : null}
+              {skill.status !== 'normal' ? (
+                <span className={`badge status-${skill.status}`} title={STATUS_LABELS[skill.status]}>
+                  {STATUS_LABELS[skill.status] ?? skill.status}
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </article>
@@ -2130,6 +2177,27 @@ export default function SkillsPage({
 
   const showEmpty =
     layout === 'grouped' ? sections.length === 0 : filtered.length === 0
+  const pendingRootLayoutCount = rootLayoutSkillCount(skills)
+
+  function skipRootLayoutMigrate() {
+    if (rootMigrating) return
+    rootLayoutSkippedRef.current = true
+    setRootMigrateOpen(false)
+    setRootMigrateError('')
+  }
+
+  async function elevateForRootLayoutMigrate() {
+    if (rootMigrating) return
+    setRootMigrating(true)
+    setRootMigrateError('')
+    try {
+      await RequestElevation()
+    } catch (e) {
+      setRootMigrateError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setRootMigrating(false)
+    }
+  }
 
   return (
     <div className={selectMode ? 'skills-page is-selecting' : 'skills-page'}>
@@ -3813,6 +3881,43 @@ export default function SkillsPage({
             <span>完成</span>
             <kbd className="select-bar-kbd">Esc</kbd>
           </button>
+        </div>
+      ) : null}
+
+      {active && rootMigrateOpen ? (
+        <div className="dialog-backdrop" role="presentation">
+          <div
+            className="dialog dialog-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="root-layout-migrate-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="root-layout-migrate-title">需要管理员权限以完成源仓布局迁移</h2>
+            <p className="muted dialog-confirm-body">
+              有 <strong>{pendingRootLayoutCount}</strong> 个技能仍在源仓根目录，且已有工具链接。迁入默认分组需要重建符号链接。
+              本次可跳过，技能仍可查看和编辑；下次启动仍会提示。
+            </p>
+            {rootMigrateError ? <div className="dialog-error">{rootMigrateError}</div> : null}
+            <div className="dialog-actions">
+              <button
+                type="button"
+                className="btn"
+                disabled={rootMigrating}
+                onClick={skipRootLayoutMigrate}
+              >
+                本次跳过
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={rootMigrating}
+                onClick={() => void elevateForRootLayoutMigrate()}
+              >
+                {rootMigrating ? '正在提权…' : '以管理员身份重启'}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

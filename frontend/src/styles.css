@@ -2052,10 +2052,19 @@ body.is-marquee-selecting * {
 }
 
 .badge.status-hub_only,
-.badge.status-real_copy_only {
+.badge.status-real_copy_only,
+.badge.root-layout {
   background: #fff7ed;
   color: #c2410c;
   border: 1px solid #fed7aa;
+}
+
+.skill-meta-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 /* 底部浮动多选操作条（深色磨砂浮岛设计） */

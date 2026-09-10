@@ -43,6 +43,8 @@ type SkillEntry struct {
 	Locations        []SkillLocation `json:"locations"`
 	DefaultLanguage  string          `json:"defaultLanguage,omitempty"`
 	TranslationCount int             `json:"translationCount,omitempty"`
+	// RootLayout is true when the hub copy still lives at hub/<id> instead of hub/<group>/<id>.
+	RootLayout bool `json:"rootLayout,omitempty"`
 }
 
 // SkillI18nInfo describes available language versions for one skill.

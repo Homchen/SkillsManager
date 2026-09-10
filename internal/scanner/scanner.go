@@ -199,13 +199,14 @@ func walkHub(hub string, byID map[string]*domain.SkillEntry) error {
 		}
 		return err
 	}
+	var rootDirs []os.DirEntry
 	for _, g := range ents {
 		if !g.IsDir() || fsutil.ShouldSkipDir(g.Name()) {
 			continue
 		}
 		groupDir := filepath.Join(hub, g.Name())
 		if fsutil.IsSkillDir(groupDir) {
-			// 未迁移的根 skill：跳过（由 Migrate 处理）；避免错误 id
+			rootDirs = append(rootDirs, g)
 			continue
 		}
 		children, err := os.ReadDir(groupDir)
@@ -229,7 +230,28 @@ func walkHub(hub string, byID map[string]*domain.SkillEntry) error {
 			e := byID[id]
 			e.HubPath = skillDir
 			e.Group = g.Name()
+			e.RootLayout = false
 		}
+	}
+	for _, g := range rootDirs {
+		id := fsutil.NormalizeSkillID(g.Name())
+		if id == "" || id == "." {
+			continue
+		}
+		if e, exists := byID[id]; exists && e.HubPath != "" {
+			// Grouped hub copy already recorded; leave the leftover root dir out.
+			continue
+		}
+		skillDir := filepath.Join(hub, g.Name())
+		addLocation(byID, id, domain.SkillLocation{
+			ToolID: "skills",
+			Path:   skillDir,
+			Kind:   domain.KindHub,
+		})
+		e := byID[id]
+		e.HubPath = skillDir
+		e.Group = domain.DefaultGroup
+		e.RootLayout = true
 	}
 	return nil
 }

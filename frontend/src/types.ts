@@ -37,6 +37,8 @@ export interface SkillEntry {
   locations: SkillLocation[]
   defaultLanguage?: string
   translationCount?: number
+  /** True when the hub copy still lives at hub/<id> instead of hub/<group>/<id>. */
+  rootLayout?: boolean
 }
 
 export interface SkillI18nInfo {

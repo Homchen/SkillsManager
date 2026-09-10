@@ -618,6 +618,7 @@ export namespace domain {
 	    locations: SkillLocation[];
 	    defaultLanguage?: string;
 	    translationCount?: number;
+	    rootLayout?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new SkillEntry(source);
@@ -634,6 +635,7 @@ export namespace domain {
 	        this.locations = this.convertValues(source["locations"], SkillLocation);
 	        this.defaultLanguage = source["defaultLanguage"];
 	        this.translationCount = source["translationCount"];
+	        this.rootLayout = source["rootLayout"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

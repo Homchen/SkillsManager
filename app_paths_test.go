@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"SkillsManager/internal/config"
+	"SkillsManager/internal/domain"
 	"SkillsManager/internal/linker"
 	"SkillsManager/internal/skilli18n"
 	"SkillsManager/internal/skillrepo"
@@ -304,8 +305,62 @@ func TestListSkillsUnelevatedDoesNotMigrateLinkedRootSkill(t *testing.T) {
 		t.Fatal("hub/foo must not move to default/")
 	}
 	assertSymlinkTarget(t, linkPath, skillDir)
-	if len(entries) == 0 {
-		t.Fatal("expected skill still visible via tool link")
+	var found domain.SkillEntry
+	for _, e := range entries {
+		if e.ID == "foo" {
+			found = e
+			break
+		}
+	}
+	if found.ID != "foo" {
+		t.Fatalf("expected skill foo in list, got %+v", entries)
+	}
+	if found.HubPath != skillDir {
+		t.Fatalf("hubPath=%q want=%q", found.HubPath, skillDir)
+	}
+	if !found.RootLayout {
+		t.Fatal("linked root skill must be marked RootLayout")
+	}
+}
+
+func TestSetSkillGroupMigratesUnlinkedRootSkill(t *testing.T) {
+	cfg, hub, skillDir, _ := setupRootSkillAndTool(t)
+
+	a := newAppCore()
+	a.cfg = cfg
+	a.elevatedFn = func() bool { return false }
+
+	if err := a.SetSkillGroup("foo", domain.DefaultGroup); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatal("hub/foo should move into default/")
+	}
+	if _, err := os.Stat(filepath.Join(hub, domain.DefaultGroup, "foo", "SKILL.md")); err != nil {
+		t.Fatalf("expected hub/default/foo: %v", err)
+	}
+}
+
+func TestSetSkillGroupUnelevatedLinkedRootSkillNeedsAdmin(t *testing.T) {
+	cfg, hub, skillDir, linkPath := setupRootSkillAndTool(t)
+	if err := linker.EnsureSymlink(linkPath, skillDir); err != nil {
+		skipIfSymlinkPermission(t, err)
+		t.Fatal(err)
+	}
+
+	a := newAppCore()
+	a.cfg = cfg
+	a.elevatedFn = func() bool { return false }
+
+	err := a.SetSkillGroup("foo", domain.DefaultGroup)
+	if err == nil || !strings.Contains(err.Error(), errNeedAdmin) {
+		t.Fatalf("expected errNeedAdmin, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); err != nil {
+		t.Fatalf("linked root skill must stay when unelevated: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(hub, domain.DefaultGroup, "foo", "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatal("must not move hub/foo into default/ when unelevated with tool links")
 	}
 }
 

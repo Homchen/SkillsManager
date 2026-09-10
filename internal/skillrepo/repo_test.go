@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"SkillsManager/internal/domain"
 	"SkillsManager/internal/trash"
 )
 
@@ -325,5 +326,73 @@ func TestProtectRootSkillDefinition(t *testing.T) {
 	}
 	if err := r.DeleteEntry("demo", "nested/SKILL.md"); err != nil {
 		t.Fatalf("nested SKILL.md should remain deletable: %v", err)
+	}
+}
+
+func TestFindRootSkill(t *testing.T) {
+	hub := t.TempDir()
+	r := New(hub, trash.New(hub))
+	writeSkillDir(t, filepath.Join(hub, "flat"))
+	group, path, err := r.Find("flat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if group != domain.DefaultGroup {
+		t.Fatalf("group=%q want=%s for hub-root layout", group, domain.DefaultGroup)
+	}
+	want := filepath.Join(hub, "flat")
+	if path != want {
+		t.Fatalf("path=%q want=%q", path, want)
+	}
+}
+
+func TestFindPrefersGroupedOverRootSkill(t *testing.T) {
+	hub := t.TempDir()
+	r := New(hub, trash.New(hub))
+	writeSkillDir(t, filepath.Join(hub, "demo"))
+	writeSkillDir(t, filepath.Join(hub, "default", "demo"))
+	group, path, err := r.Find("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if group != "default" {
+		t.Fatalf("group=%q want=default", group)
+	}
+	want := filepath.Join(hub, "default", "demo")
+	if path != want {
+		t.Fatalf("path=%q want=%q", path, want)
+	}
+}
+
+func TestRenameRootSkillMovesIntoDefault(t *testing.T) {
+	hub := t.TempDir()
+	r := New(hub, trash.New(hub))
+	writeSkillDir(t, filepath.Join(hub, "flat"))
+	if err := r.Rename("flat", "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(hub, "flat", "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatal("hub/flat should be gone")
+	}
+	if _, err := os.Stat(filepath.Join(hub, domain.DefaultGroup, "renamed", "SKILL.md")); err != nil {
+		t.Fatalf("want hub/default/renamed: %v", err)
+	}
+}
+
+func TestSetSkillGroupMovesRootSkillIntoDefault(t *testing.T) {
+	hub := t.TempDir()
+	r := New(hub, trash.New(hub))
+	writeSkillDir(t, filepath.Join(hub, "flat"))
+	if err := r.SetSkillGroup("flat", domain.DefaultGroup); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(hub, "flat", "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatal("hub/flat should be gone")
+	}
+	if _, err := os.Stat(filepath.Join(hub, domain.DefaultGroup, "flat", "SKILL.md")); err != nil {
+		t.Fatalf("want hub/default/flat: %v", err)
+	}
+	if err := r.SetSkillGroup("flat", domain.DefaultGroup); err != nil {
+		t.Fatalf("second assign to default should be noop: %v", err)
 	}
 }

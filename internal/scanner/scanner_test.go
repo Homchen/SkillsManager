@@ -392,3 +392,142 @@ func TestDeepScanSameLeafOrphansStayDistinct(t *testing.T) {
 		t.Fatalf("ids=%v want Projects/alpha/demo and Other/demo", ids)
 	}
 }
+
+func writeScanSkill(t *testing.T, dir, name string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nname: " + name + "\n---\n"
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestScanIncludesRootHubSkillWithToolSymlink(t *testing.T) {
+	root := t.TempDir()
+	hub := filepath.Join(root, "hub")
+	tool := filepath.Join(root, "cursor-skills")
+	skillHub := filepath.Join(hub, "foo")
+	writeScanSkill(t, skillHub, "Foo")
+	if err := os.MkdirAll(tool, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := linker.EnsureSymlink(filepath.Join(tool, "foo"), skillHub); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	cfg := config.Config{
+		HubPath: hub,
+		Tools: []config.ToolMapping{
+			{ID: "skills", Path: hub, Enabled: true, IsHub: true},
+			{ID: "cursor", Path: tool, Enabled: true},
+		},
+	}
+	entries, err := Scan(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries=%d want=1, got=%+v", len(entries), entries)
+	}
+	e := entries[0]
+	if e.ID != "foo" {
+		t.Fatalf("id=%q want=foo", e.ID)
+	}
+	if e.Group != domain.DefaultGroup {
+		t.Fatalf("group=%q want=%s", e.Group, domain.DefaultGroup)
+	}
+	if e.HubPath != skillHub {
+		t.Fatalf("hubPath=%q want=%q", e.HubPath, skillHub)
+	}
+	if !e.RootLayout {
+		t.Fatal("RootLayout must be true for hub/<id>")
+	}
+	kinds := map[domain.LocationKind]int{}
+	for _, loc := range e.Locations {
+		kinds[loc.Kind]++
+	}
+	if kinds[domain.KindHub] != 1 || kinds[domain.KindSymlink] != 1 {
+		t.Fatalf("kinds=%v locs=%+v", kinds, e.Locations)
+	}
+	if e.Status != domain.StatusNormal {
+		t.Fatalf("status=%s want=%s", e.Status, domain.StatusNormal)
+	}
+}
+
+func TestScanGroupedCopyWinsOverRootSkillSameID(t *testing.T) {
+	root := t.TempDir()
+	hub := filepath.Join(root, "hub")
+	grouped := filepath.Join(hub, "default", "foo")
+	writeScanSkill(t, filepath.Join(hub, "foo"), "Root")
+	writeScanSkill(t, grouped, "Grouped")
+
+	cfg := config.Config{
+		HubPath: hub,
+		Tools: []config.ToolMapping{
+			{ID: "skills", Path: hub, Enabled: true, IsHub: true},
+		},
+	}
+	entries, err := Scan(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries=%d want=1 (same id merged, grouped wins), got=%+v", len(entries), entries)
+	}
+	e := entries[0]
+	if e.ID != "foo" {
+		t.Fatalf("id=%q want=foo", e.ID)
+	}
+	if e.HubPath != grouped {
+		t.Fatalf("hubPath=%q want=%q", e.HubPath, grouped)
+	}
+	if e.RootLayout {
+		t.Fatal("grouped copy must not be marked RootLayout")
+	}
+	if e.Group != domain.DefaultGroup {
+		t.Fatalf("group=%q want=%s", e.Group, domain.DefaultGroup)
+	}
+	if e.Name != "Grouped" {
+		t.Fatalf("name=%q want=Grouped (grouped SKILL.md)", e.Name)
+	}
+}
+
+func TestScanRootHubSkillWhenHubNotInTools(t *testing.T) {
+	root := t.TempDir()
+	hub := filepath.Join(root, "hub")
+	tool := filepath.Join(root, "cursor-skills")
+	skillHub := filepath.Join(hub, "foo")
+	writeScanSkill(t, skillHub, "Foo")
+	if err := os.MkdirAll(tool, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := linker.EnsureSymlink(filepath.Join(tool, "foo"), skillHub); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	cfg := config.Config{
+		HubPath: hub,
+		Tools: []config.ToolMapping{
+			{ID: "cursor", Path: tool, Enabled: true},
+		},
+	}
+	entries, err := Scan(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries=%d want=1, got=%+v", len(entries), entries)
+	}
+	e := entries[0]
+	if e.HubPath != skillHub {
+		t.Fatalf("hubPath=%q want=%q", e.HubPath, skillHub)
+	}
+	if !e.RootLayout {
+		t.Fatal("RootLayout must be true")
+	}
+	if e.Status != domain.StatusNormal {
+		t.Fatalf("status=%s want=%s", e.Status, domain.StatusNormal)
+	}
+}

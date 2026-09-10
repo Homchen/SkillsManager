@@ -65,10 +65,20 @@ func (r *Repo) Find(id string) (string, string, error) {
 		if !e.IsDir() || fsutil.ShouldSkipDir(e.Name()) {
 			continue
 		}
-		cand := filepath.Join(r.Hub, e.Name(), id)
+		groupDir := filepath.Join(r.Hub, e.Name())
+		if fsutil.IsSkillDir(groupDir) {
+			continue
+		}
+		cand := filepath.Join(groupDir, id)
 		if fsutil.IsSkillDir(cand) {
 			return e.Name(), cand, nil
 		}
+	}
+	root := filepath.Join(r.Hub, id)
+	if fsutil.IsSkillDir(root) {
+		// Still at hub/<id>; report DefaultGroup so Find matches Scan/UI.
+		// Callers that move files must compare paths, not group names.
+		return domain.DefaultGroup, root, nil
 	}
 	return "", "", fmt.Errorf("未找到 skill: %s", id)
 }

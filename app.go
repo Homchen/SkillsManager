@@ -729,7 +729,7 @@ func (a *appCore) DeleteGroup(name string) error {
 
 // SetSkillGroup moves a hub skill into another group and retargets tool symlinks.
 func (a *appCore) SetSkillGroup(skillID, group string) error {
-	curGroup, _, err := a.repo().Find(skillID)
+	_, src, err := a.repo().Find(skillID)
 	if err != nil {
 		return userErr(err)
 	}
@@ -737,7 +737,7 @@ func (a *appCore) SetSkillGroup(skillID, group string) error {
 	if target == "" {
 		target = domain.DefaultGroup
 	}
-	if curGroup == target {
+	if fsutil.SamePath(src, a.repo().SkillPath(target, skillID)) {
 		return nil
 	}
 	if skillHasToolLinks(a.cfg, skillID) {

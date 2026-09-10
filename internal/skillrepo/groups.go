@@ -115,14 +115,14 @@ func (r *Repo) SetSkillGroup(id, group string) error {
 			return err
 		}
 	}
-	curGroup, src, err := r.Find(id)
+	_, src, err := r.Find(id)
 	if err != nil {
 		return err
 	}
-	if curGroup == group {
+	dst := r.SkillPath(group, id)
+	if fsutil.SamePath(src, dst) {
 		return nil
 	}
-	dst := r.SkillPath(group, id)
 	if _, err := os.Stat(dst); err == nil {
 		return fmt.Errorf("目标分组已存在同名 skill: %s", id)
 	}
