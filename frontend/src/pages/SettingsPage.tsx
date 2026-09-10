@@ -1776,7 +1776,7 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                     </div>
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className="btn btn-primary elev-status-action"
                       disabled={elevating}
                       onClick={() => void requestElevation()}
                     >

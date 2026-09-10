@@ -10213,15 +10213,19 @@ body.is-marquee-selecting * {
   color: var(--muted);
 }
 
-.elev-status-tag {
+.elev-status-tag,
+.elev-status-action {
   flex-shrink: 0;
   align-self: center;
+  white-space: nowrap;
+}
+
+.elev-status-tag {
   padding: 3px 8px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.3;
-  white-space: nowrap;
 }
 
 .elev-status--ok {
