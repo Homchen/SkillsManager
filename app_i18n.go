@@ -7,8 +7,13 @@ import (
 
 	"SkillsManager/internal/fsutil"
 	"SkillsManager/internal/skilli18n"
+	"SkillsManager/internal/skillrepo"
 	"SkillsManager/internal/trash"
 )
+
+func trashSkillID(skillTrashPath string) string {
+	return fsutil.NormalizeSkillID(trash.SkillIDFromPath(skillTrashPath))
+}
 
 func moveI18nToTrashSidecar(hub, id, skillTrashPath string) error {
 	id = fsutil.NormalizeSkillID(id)
@@ -24,12 +29,16 @@ func moveI18nToTrashSidecar(hub, id, skillTrashPath string) error {
 	if err != nil {
 		return err
 	}
-	dest := trash.I18nSidecar(bucket, id)
+	leaf := trashSkillID(skillTrashPath)
+	if leaf == "" {
+		leaf = id
+	}
+	dest := trash.I18nSidecar(bucket, leaf)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
 	if _, err := os.Stat(dest); err == nil {
-		return fmt.Errorf("回收站翻译副本已存在: %s", id)
+		return fmt.Errorf("回收站翻译副本已存在: %s", leaf)
 	} else if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -37,7 +46,7 @@ func moveI18nToTrashSidecar(hub, id, skillTrashPath string) error {
 }
 
 func restoreI18nFromTrashSidecar(hub, skillTrashPath, displacedTrashPath string) error {
-	id := fsutil.NormalizeSkillID(filepath.Base(skillTrashPath))
+	id := trashSkillID(skillTrashPath)
 	if id == "" {
 		return nil
 	}
@@ -58,6 +67,11 @@ func restoreI18nFromTrashSidecar(hub, skillTrashPath, displacedTrashPath string)
 			}
 			dest := trash.I18nSidecar(db, id)
 			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+				return err
+			}
+			if _, err := os.Stat(dest); err == nil {
+				return fmt.Errorf("回收站翻译副本已存在: %s", id)
+			} else if err != nil && !os.IsNotExist(err) {
 				return err
 			}
 			if err := os.Rename(live, dest); err != nil {
@@ -83,4 +97,24 @@ func restoreI18nFromTrashSidecar(hub, skillTrashPath, displacedTrashPath string)
 		return err
 	}
 	return os.Rename(sidecar, live)
+}
+
+func rollbackRestoredSkillToTrash(hub, skillTrashPath string) error {
+	id := trashSkillID(skillTrashPath)
+	if id == "" {
+		return fmt.Errorf("无效的回收站条目")
+	}
+	_, abs, err := skillrepo.New(hub, trash.New(hub)).Find(id)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(skillTrashPath), 0o755); err != nil {
+		return err
+	}
+	if _, err := os.Stat(skillTrashPath); err == nil {
+		return fmt.Errorf("回收站原路径已存在: %s", skillTrashPath)
+	} else if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.Rename(abs, skillTrashPath)
 }

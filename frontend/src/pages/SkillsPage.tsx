@@ -3867,7 +3867,7 @@ export default function SkillsPage({
                 <>
                   彻底删除{' '}
                   <strong>{confirmDialog.item.name || confirmDialog.item.id}</strong>
-                  {' '}？此操作不可恢复。
+                  {' '}？翻译版本也会一并永久删除，此操作不可恢复。
                 </>
               )}
             </p>

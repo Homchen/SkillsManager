@@ -507,17 +507,26 @@ func (s *Store) renamePlan(oldID, newID string) (src, dst string, skip bool, err
 	oldID = fsutil.NormalizeSkillID(oldID)
 	newID = fsutil.NormalizeSkillID(newID)
 	src = s.SkillDir(oldID)
-	if _, err := os.Stat(src); err != nil {
-		if os.IsNotExist(err) {
-			return "", "", true, nil
-		}
-		return "", "", false, err
-	}
 	dst = s.SkillDir(newID)
-	if _, err := os.Stat(dst); err == nil {
+
+	_, srcErr := os.Stat(src)
+	if srcErr != nil && !os.IsNotExist(srcErr) {
+		return "", "", false, srcErr
+	}
+	srcMissing := srcErr != nil
+
+	_, dstErr := os.Stat(dst)
+	if dstErr != nil && !os.IsNotExist(dstErr) {
+		return src, dst, false, dstErr
+	}
+	if dstErr == nil {
+		if !srcMissing && fsutil.SamePath(src, dst) {
+			return src, dst, true, nil
+		}
 		return src, dst, false, fmt.Errorf("翻译仓中已存在 skill：%s", newID)
-	} else if !os.IsNotExist(err) {
-		return src, dst, false, err
+	}
+	if srcMissing {
+		return "", "", true, nil
 	}
 	return src, dst, false, nil
 }
@@ -616,7 +625,7 @@ func migrateRootPlan(oldHub, newHub string) (oldRoot, newRoot string, skip bool,
 	}
 	oldRoot = filepath.Join(filepath.Dir(oldHub), DirName)
 	newRoot = filepath.Join(filepath.Dir(newHub), DirName)
-	if filepath.Clean(oldRoot) == filepath.Clean(newRoot) {
+	if fsutil.SamePath(oldRoot, newRoot) {
 		return oldRoot, newRoot, true, nil
 	}
 	if _, err := os.Stat(oldRoot); err != nil {

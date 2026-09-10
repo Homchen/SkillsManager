@@ -288,7 +288,7 @@ func (a *appCore) SaveConfig(cfg config.Config) error {
 			return userErr(fmt.Errorf("迁移源仓失败: %w", err))
 		}
 		if err := skilli18n.MigrateRoot(oldHub, newHub); err != nil {
-			return userErr(fmt.Errorf("迁移翻译仓失败: %w", err))
+			return userErr(fmt.Errorf("源仓已迁至 %s，但翻译仓未能迁出；配置仍指向旧路径，请再次保存以重试翻译仓迁移: %w", newHub, err))
 		}
 	}
 
@@ -810,6 +810,9 @@ func (a *appCore) RestoreTrash(trashPath string, overwrite bool) error {
 		return userErr(err)
 	}
 	if err := restoreI18nFromTrashSidecar(a.cfg.HubPath, trashPath, displaced); err != nil {
+		if rbErr := rollbackRestoredSkillToTrash(a.cfg.HubPath, trashPath); rbErr != nil {
+			return userErr(fmt.Errorf("%w；回滚源仓到回收站失败: %v", err, rbErr))
+		}
 		return userErr(err)
 	}
 	return nil

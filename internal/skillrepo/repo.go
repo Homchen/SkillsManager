@@ -28,6 +28,9 @@ func ValidateGroupName(name string) error {
 	if strings.EqualFold(name, domain.DefaultGroup) {
 		return fmt.Errorf("不能使用保留分组名 default")
 	}
+	if strings.EqualFold(name, "_trash") || strings.EqualFold(name, trash.I18nDirName) {
+		return fmt.Errorf("不能使用保留分组名 %s", name)
+	}
 	if strings.ContainsAny(name, `/\`) || name == "." || name == ".." || strings.Contains(name, "..") {
 		return fmt.Errorf("分组名非法: %s", name)
 	}

@@ -11,6 +11,7 @@ var defaultSkip = map[string]struct{}{
 	"node_modules": {},
 	".git":         {},
 	"_trash":       {},
+	"_i18n":        {},
 	".trash":       {},
 	".system":      {}, // Codex 等工具的系统内置 skills，不纳入管理
 	".bun":         {}, // Bun 全局缓存（~/.bun/install/cache 等）

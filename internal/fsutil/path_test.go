@@ -32,7 +32,7 @@ func TestIsSkillDir(t *testing.T) {
 
 func TestShouldSkipDir(t *testing.T) {
 	for _, name := range []string{
-		"node_modules", "_trash", ".git", ".system", ".bun",
+		"node_modules", "_trash", "_i18n", ".git", ".system", ".bun",
 		"AppData", "Temp", "tmp", ".cache", ".paddlex", ".huggingface",
 	} {
 		if !ShouldSkipDir(name) {

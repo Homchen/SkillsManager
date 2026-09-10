@@ -370,6 +370,30 @@ func TestListSkipsI18nSidecar(t *testing.T) {
 	}
 }
 
+func TestListDoesNotSkipSkillOutsideSidecar(t *testing.T) {
+	hub := t.TempDir()
+	st := New(hub)
+	src := filepath.Join(hub, domain.DefaultGroup, "keep")
+	writeSkill(t, src, "hub")
+	dest, err := st.Move(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket, err := st.BucketDir(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSkill(t, filepath.Join(bucket, "custom", I18nDirName), "named-i18n")
+	writeSkill(t, filepath.Join(I18nSidecar(bucket, "keep"), "en"), "en")
+	items, err := st.List(7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("list=%d, want hub skill plus grouped skill named _i18n", len(items))
+	}
+}
+
 func TestPurgeEntryRemovesI18nSidecar(t *testing.T) {
 	hub := t.TempDir()
 	st := New(hub)

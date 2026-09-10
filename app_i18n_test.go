@@ -176,3 +176,104 @@ func TestRestoreTrashOverwriteKeepsDisplacedTranslations(t *testing.T) {
 		t.Fatalf("displaced ja translation=%q err=%v", b, err)
 	}
 }
+
+func TestRollbackSkillRenameRestoresI18n(t *testing.T) {
+	a, hub := newTestApp(t)
+	if err := a.CreateSkill("old", "Old", "", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	addTranslation(t, hub, "old", "en", "en-body")
+	if err := a.repo().Rename("old", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.i18n().Rename("old", "new"); err != nil {
+		t.Fatal(err)
+	}
+	cause := errors.New("relink failed")
+	err := a.rollbackSkillRename("old", "new", true, cause)
+	if !errors.Is(err, cause) {
+		t.Fatalf("err=%v", err)
+	}
+	if _, _, err := a.repo().Find("old"); err != nil {
+		t.Fatalf("hub should roll back to old: %v", err)
+	}
+	if _, _, err := a.repo().Find("new"); err == nil {
+		t.Fatal("new hub skill should be gone")
+	}
+	b, err := os.ReadFile(filepath.Join(skilli18n.New(hub).VersionPath("old", "en"), "SKILL.md"))
+	if err != nil || string(b) != "en-body" {
+		t.Fatalf("i18n should roll back to old: %q err=%v", b, err)
+	}
+}
+
+func TestRestoreTrashRollsBackWhenLiveTranslationExists(t *testing.T) {
+	a, hub := newTestApp(t)
+	if err := a.CreateSkill("demo", "Demo", "", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	addTranslation(t, hub, "demo", "en", "en-body")
+	if err := a.DeleteSkill("demo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := skilli18n.New(hub).InitDefault("demo", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	items, err := a.ListTrash()
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%v err=%v", items, err)
+	}
+	if err := a.RestoreTrash(items[0].TrashPath, false); err == nil {
+		t.Fatal("expected live translation conflict")
+	}
+	if _, _, err := a.repo().Find("demo"); err == nil {
+		t.Fatal("hub skill should have been rolled back to trash")
+	}
+	items, err = a.ListTrash()
+	if err != nil || len(items) != 1 {
+		t.Fatalf("skill should be back in trash, items=%d err=%v", len(items), err)
+	}
+}
+
+func TestMoveI18nSidecarUsesTrashLeafName(t *testing.T) {
+	a, hub := newTestApp(t)
+	if err := a.CreateSkill("demo", "Demo", "", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	addTranslation(t, hub, "demo", "en", "en-body")
+	trashPath := filepath.Join(hub, "_trash", "20200101-120000", "default", "demo-99")
+	if err := moveI18nToTrashSidecar(hub, "demo", trashPath); err != nil {
+		t.Fatal(err)
+	}
+	sidecar := trash.I18nSidecar(filepath.Join(hub, "_trash", "20200101-120000"), "demo-99")
+	if _, err := os.Stat(filepath.Join(sidecar, "en", "SKILL.md")); err != nil {
+		t.Fatalf("sidecar should use trash leaf name: %v", err)
+	}
+	if _, err := os.Stat(skilli18n.New(hub).SkillDir("demo")); !os.IsNotExist(err) {
+		t.Fatal("live translation dir should be gone")
+	}
+}
+
+func TestRestoreI18nRejectsExistingDisplacedSidecar(t *testing.T) {
+	_, hub := newTestApp(t)
+	if err := skilli18n.New(hub).InitDefault("demo", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	orig := filepath.Join(hub, "_trash", "orig", "default", "demo")
+	displaced := filepath.Join(hub, "_trash", "disp", "default", "demo")
+	if err := os.MkdirAll(filepath.Dir(orig), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(displaced), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := trash.I18nSidecar(filepath.Join(hub, "_trash", "disp"), "demo")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := restoreI18nFromTrashSidecar(hub, orig, displaced); err == nil {
+		t.Fatal("expected displaced sidecar conflict")
+	}
+	if _, err := os.Stat(skilli18n.New(hub).SkillDir("demo")); err != nil {
+		t.Fatalf("live translations should stay: %v", err)
+	}
+}

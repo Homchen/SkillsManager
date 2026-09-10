@@ -68,6 +68,11 @@ func I18nSidecar(bucket, skillID string) string {
 	return filepath.Join(bucket, I18nDirName, skillID)
 }
 
+// SkillIDFromPath is the leaf directory name of a trash skill path.
+func SkillIDFromPath(trashPath string) string {
+	return filepath.Base(filepath.Clean(trashPath))
+}
+
 // BucketDir returns the timestamp folder that contains trashPath.
 func (s *Store) BucketDir(trashPath string) (string, error) {
 	abs, err := s.validateTrashPath(trashPath)
@@ -135,7 +140,8 @@ func (s *Store) List(retentionDays int) ([]domain.TrashItem, error) {
 			if err != nil || d == nil || !d.IsDir() {
 				return err
 			}
-			if d.Name() == I18nDirName {
+			relToBucket, relErr := filepath.Rel(bucket, path)
+			if relErr == nil && filepath.ToSlash(relToBucket) == I18nDirName {
 				return filepath.SkipDir
 			}
 			if _, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil {
@@ -240,7 +246,7 @@ func (s *Store) PurgeEntry(trashPath string) error {
 	if err != nil {
 		return err
 	}
-	sidecar := I18nSidecar(bucket, filepath.Base(abs))
+	sidecar := I18nSidecar(bucket, SkillIDFromPath(abs))
 	if err := os.RemoveAll(abs); err != nil {
 		return err
 	}

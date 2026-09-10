@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+
+	"SkillsManager/internal/fsutil"
 )
 
 func TestInfoWithoutDefaultLanguageLanguagesNotNil(t *testing.T) {
@@ -262,6 +265,23 @@ func TestReconcilePrunesMissingDirs(t *testing.T) {
 	}
 }
 
+func TestRenameMovesTranslationTree(t *testing.T) {
+	hub := t.TempDir()
+	s := New(hub)
+	if err := s.InitDefault("old", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Rename("old", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(s.SkillDir("old")); !os.IsNotExist(err) {
+		t.Fatal("old translation dir should be gone")
+	}
+	if _, err := os.Stat(s.MetaPath("new")); err != nil {
+		t.Fatalf("new translation dir missing: %v", err)
+	}
+}
+
 func TestRenameNoopWhenSourceMissing(t *testing.T) {
 	s := New(t.TempDir())
 	if err := s.CanRename("missing", "next"); err != nil {
@@ -269,6 +289,23 @@ func TestRenameNoopWhenSourceMissing(t *testing.T) {
 	}
 	if err := s.Rename("missing", "next"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCanRenameConflictWhenSourceMissingDestExists(t *testing.T) {
+	hub := t.TempDir()
+	s := New(hub)
+	if err := s.InitDefault("taken", "en"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CanRename("missing", "taken"); err == nil {
+		t.Fatal("expected dest conflict even when source is missing")
+	}
+	if err := s.Rename("missing", "taken"); err == nil {
+		t.Fatal("expected dest conflict even when source is missing")
+	}
+	if _, err := os.Stat(s.SkillDir("taken")); err != nil {
+		t.Fatalf("dest should remain: %v", err)
 	}
 }
 
@@ -370,4 +407,62 @@ func TestMigrateRootNoopWhenOldMissing(t *testing.T) {
 	if err := MigrateRoot(oldHub, newHub); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestMigrateRootSkipsSiblingHubsSharingTranslationRoot(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "parent")
+	oldHub := filepath.Join(parent, "skills")
+	newHub := filepath.Join(parent, "skills-new")
+	if err := New(oldHub).InitDefault("demo", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckMigrateRoot(oldHub, newHub); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateRoot(oldHub, newHub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(New(oldHub).MetaPath("demo")); err != nil {
+		t.Fatalf("shared translation root should stay: %v", err)
+	}
+}
+
+func TestMigrateRootSkipsWhenRootsDifferOnlyByCase(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("path case folding is Windows-specific")
+	}
+	parent := t.TempDir()
+	oldHub := filepath.Join(parent, "skills")
+	if err := New(oldHub).InitDefault("demo", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	flipped := flipASCIICase(parent)
+	newHub := filepath.Join(flipped, "skills-new")
+	if !fsutil.SamePath(filepath.Dir(oldHub), filepath.Dir(newHub)) {
+		t.Fatalf("setup: %q and %q should be the same location", parent, flipped)
+	}
+	if err := CheckMigrateRoot(oldHub, newHub); err != nil {
+		t.Fatalf("same translation root must not look like a dest conflict: %v", err)
+	}
+	if err := MigrateRoot(oldHub, newHub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(New(oldHub).MetaPath("demo")); err != nil {
+		t.Fatalf("translation should remain: %v", err)
+	}
+}
+
+func flipASCIICase(s string) string {
+	r := []rune(s)
+	for i, c := range r {
+		if c >= 'a' && c <= 'z' {
+			r[i] = c - 'a' + 'A'
+			return string(r)
+		}
+		if c >= 'A' && c <= 'Z' {
+			r[i] = c - 'A' + 'a'
+			return string(r)
+		}
+	}
+	return s
 }

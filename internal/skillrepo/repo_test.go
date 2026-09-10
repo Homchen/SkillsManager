@@ -200,6 +200,14 @@ func TestValidateGroupNameRejectsDefault(t *testing.T) {
 	}
 }
 
+func TestValidateGroupNameRejectsReservedLayoutNames(t *testing.T) {
+	for _, name := range []string{"_trash", "_i18n", "_I18N"} {
+		if err := ValidateGroupName(name); err == nil {
+			t.Fatalf("expected reserved group name %q to be rejected", name)
+		}
+	}
+}
+
 func TestCreateFileAndMkdir(t *testing.T) {
 	hub := t.TempDir()
 	r := New(hub, trash.New(hub))

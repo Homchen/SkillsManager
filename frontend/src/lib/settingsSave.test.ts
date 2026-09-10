@@ -114,6 +114,14 @@ describe('settings field helpers', () => {
     })
   })
 
+  it('maps post-hub-move translation errors to hubPath', () => {
+    expect(
+      mapSaveConfigError('源仓已迁至 D:\\new，但翻译仓未能迁出；配置仍指向旧路径'),
+    ).toMatchObject({
+      field: 'hubPath',
+    })
+  })
+
   it('leaves unmapped backend errors without a field', () => {
     expect(mapSaveConfigError('磁盘已满')).toBeNull()
   })
