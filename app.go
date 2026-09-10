@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,7 +63,22 @@ type appCore struct {
 
 	// elevatedFn, when set, overrides priv.IsElevated (tests only).
 	elevatedFn func() bool
+
+	scanMu       sync.Mutex
+	scanCache    *scanSnapshot
+	scanInflight chan struct{}
+	scanGen      uint64
+	scanFn       func(config.Config) ([]domain.SkillEntry, error)
+	nowFn        func() time.Time
 }
+
+type scanSnapshot struct {
+	key     string
+	entries []domain.SkillEntry
+	at      time.Time
+}
+
+const scanCacheTTL = 2 * time.Second
 
 func newAppCore() *appCore {
 	return &appCore{organize: organizer.NewSession()}
@@ -153,11 +169,14 @@ func (a *appCore) i18n() *skilli18n.Store {
 	return skilli18n.New(a.cfg.HubPath)
 }
 
-func (a *appCore) enrichSkillI18n(entries []domain.SkillEntry) {
-	store := a.i18n()
+func (a *appCore) attachSkillI18n(entries []domain.SkillEntry) {
+	infos, err := a.i18n().ListInfo()
+	if err != nil {
+		return
+	}
 	for i := range entries {
-		info, err := store.Info(entries[i].ID)
-		if err != nil {
+		info, ok := infos[entries[i].ID]
+		if !ok {
 			continue
 		}
 		entries[i].DefaultLanguage = info.DefaultLanguage
@@ -200,6 +219,7 @@ func (a *appCore) ReloadConfig() (config.Config, error) {
 	a.configLoadError = ""
 	a.ensureHubReady()
 	a.applyLogging()
+	a.invalidateScan()
 	return a.GetConfig()
 }
 
@@ -316,6 +336,7 @@ func (a *appCore) SaveConfig(cfg config.Config) error {
 	if err := cfg.Save(path); err != nil {
 		if hubChanged {
 			a.cfg = cfg
+			a.invalidateScan()
 		}
 		return userErr(fmt.Errorf("内容可能已迁移但保存配置失败，请再次保存设置: %w", err))
 	}
@@ -324,6 +345,7 @@ func (a *appCore) SaveConfig(cfg config.Config) error {
 	}
 	a.cfg = cfg
 	a.applyLogging()
+	a.invalidateScan()
 	return nil
 }
 
@@ -523,17 +545,21 @@ func (a *appCore) RevealInFolder(path string) error {
 // ListSkills scans configured roots (hub + enabled tools). Deep-scan orphans are not included.
 func (a *appCore) ListSkills() ([]domain.SkillEntry, error) {
 	a.ensureHubReady()
-	if err := migrateRootSkillsAndRelink(a.cfg, a.repo(), a.isElevated()); err != nil {
+	moved, err := migrateRootSkillsAndRelink(a.cfg, a.repo(), a.isElevated())
+	if err != nil {
 		if !isNeedAdminErr(err) {
 			return nil, userErr(err)
 		}
 		applog.Info("list skills: skip linked root migrate, needs elevation", "err", err)
 	}
+	if moved {
+		a.invalidateScan()
+	}
 	entries, err := a.listMerged()
 	if err != nil {
 		return entries, userErr(err)
 	}
-	a.enrichSkillI18n(entries)
+	a.attachSkillI18n(entries)
 	return entries, nil
 }
 
@@ -572,7 +598,7 @@ func (a *appCore) DeepScanSkills() ([]domain.SkillEntry, error) {
 		applog.Error("deep scan fail", "jobId", jobID, "err", err)
 		return nil, userErr(err)
 	}
-	a.enrichSkillI18n(extras)
+	a.attachSkillI18n(extras)
 	applog.Info("deep scan ok", "jobId", jobID, "count", len(extras))
 	return extras, nil
 }
@@ -593,8 +619,10 @@ func (a *appCore) CreateSkill(id, name, group, language string) error {
 	}
 	if err := a.i18n().InitDefault(id, language); err != nil {
 		_, _ = a.repo().Delete(id)
+		a.invalidateScan()
 		return userErr(err)
 	}
+	a.invalidateScan()
 	return nil
 }
 
@@ -605,6 +633,7 @@ func (a *appCore) ImportSkills(paths []string) (domain.ImportSkillsResult, error
 	if res.Items == nil {
 		res.Items = []domain.ImportSkillItem{}
 	}
+	a.invalidateScan()
 	return res, userErr(err)
 }
 
@@ -621,7 +650,7 @@ func (a *appCore) ListGroups() ([]domain.GroupInfo, error) {
 // CreateGroup creates an empty custom group directory under the hub.
 func (a *appCore) CreateGroup(name string) error {
 	a.ensureHubReady()
-	return userErr(a.repo().CreateGroup(name))
+	return a.commitScanChange(a.repo().CreateGroup(name))
 }
 
 // RenameGroup renames a custom group and retargets tool symlinks for skills inside it.
@@ -640,6 +669,8 @@ func (a *appCore) RenameGroup(oldName, newName string) error {
 	if err := a.repo().RenameGroup(oldName, newName); err != nil {
 		return userErr(err)
 	}
+	a.invalidateScan()
+	defer a.invalidateScan()
 	a.cfg.RenameCollapsedSkillGroup(oldName, newName)
 	if err := a.persistSettings(); err != nil {
 		return userErr(err)
@@ -677,6 +708,8 @@ func (a *appCore) DeleteGroup(name string) error {
 	if err := a.repo().DeleteGroup(name); err != nil {
 		return userErr(err)
 	}
+	a.invalidateScan()
+	defer a.invalidateScan()
 	a.cfg.RemoveCollapsedSkillGroup(name)
 	if err := a.persistSettings(); err != nil {
 		return userErr(err)
@@ -715,6 +748,8 @@ func (a *appCore) SetSkillGroup(skillID, group string) error {
 	if err := a.repo().SetSkillGroup(skillID, group); err != nil {
 		return userErr(err)
 	}
+	a.invalidateScan()
+	defer a.invalidateScan()
 	path, err := a.resolveHubSkillPath(skillID)
 	if err != nil {
 		return userErr(err)
@@ -745,10 +780,12 @@ func (a *appCore) RenameSkill(oldID, newID string) error {
 	if err := relinkSkillAfterRename(a.cfg, oldID, newID, path, a.isElevated()); err != nil {
 		return userErr(a.rollbackSkillRename(oldID, newID, true, err))
 	}
+	a.invalidateScan()
 	return nil
 }
 
 func (a *appCore) rollbackSkillRename(oldID, newID string, i18nMoved bool, cause error) error {
+	a.invalidateScan()
 	if i18nMoved {
 		if err := a.i18n().Rename(newID, oldID); err != nil {
 			return fmt.Errorf("%w；回滚翻译仓失败: %v", cause, err)
@@ -776,15 +813,18 @@ func (a *appCore) DeleteSkill(id string) error {
 	if err := unlinkSkillToolLinks(a.cfg, id); err != nil {
 		return userErr(err)
 	}
+	a.invalidateScan()
 	trashPath, err := a.repo().Delete(id)
 	if err != nil {
 		return userErr(err)
 	}
 	if err := moveI18nToTrashSidecar(a.cfg.HubPath, id, trashPath); err != nil {
+		a.invalidateScan()
 		a.purgeTrash()
 		return userErr(fmt.Errorf("已移入回收站，但翻译版本未能一并移入: %w", err))
 	}
 	a.purgeTrash()
+	a.invalidateScan()
 	return nil
 }
 
@@ -809,6 +849,7 @@ func (a *appCore) RestoreTrash(trashPath string, overwrite bool) error {
 	if err != nil {
 		return userErr(err)
 	}
+	a.invalidateScan()
 	if err := restoreI18nFromTrashSidecar(a.cfg.HubPath, trashPath, displaced); err != nil {
 		if rbErr := rollbackRestoredSkillToTrash(a.cfg.HubPath, trashPath); rbErr != nil {
 			return userErr(fmt.Errorf("%w；回滚源仓到回收站失败: %v", err, rbErr))
@@ -820,7 +861,7 @@ func (a *appCore) RestoreTrash(trashPath string, overwrite bool) error {
 
 // PurgeTrash permanently deletes one trash entry.
 func (a *appCore) PurgeTrash(trashPath string) error {
-	return userErr(trash.New(a.cfg.HubPath).PurgeEntry(trashPath))
+	return a.commitScanChange(trash.New(a.cfg.HubPath).PurgeEntry(trashPath))
 }
 
 // ListSkillFiles lists relative file paths under a skill language version.
@@ -850,7 +891,7 @@ func (a *appCore) WriteSkillFile(ref domain.SkillVersionRef, rel, content string
 	if err != nil {
 		return userErr(err)
 	}
-	return userErr(skillrepo.WriteFileIn(root, rel, content))
+	return a.commitScanChange(skillrepo.WriteFileIn(root, rel, content))
 }
 
 // CreateSkillFile creates an empty text file under a skill language version.
@@ -859,7 +900,7 @@ func (a *appCore) CreateSkillFile(ref domain.SkillVersionRef, rel string) error 
 	if err != nil {
 		return userErr(err)
 	}
-	return userErr(skillrepo.CreateFileIn(root, rel))
+	return a.commitScanChange(skillrepo.CreateFileIn(root, rel))
 }
 
 // RenameSkillEntry renames a file or directory under a skill language version.
@@ -868,7 +909,7 @@ func (a *appCore) RenameSkillEntry(ref domain.SkillVersionRef, oldRel, newRel st
 	if err != nil {
 		return userErr(err)
 	}
-	return userErr(skillrepo.RenameEntryIn(root, oldRel, newRel))
+	return a.commitScanChange(skillrepo.RenameEntryIn(root, oldRel, newRel))
 }
 
 // DeleteSkillEntry permanently removes a file or directory under a skill language version.
@@ -877,7 +918,7 @@ func (a *appCore) DeleteSkillEntry(ref domain.SkillVersionRef, rel string) error
 	if err != nil {
 		return userErr(err)
 	}
-	return userErr(skillrepo.DeleteEntryIn(root, rel))
+	return a.commitScanChange(skillrepo.DeleteEntryIn(root, rel))
 }
 
 // CreateSkillDir creates a directory under a skill language version.
@@ -886,7 +927,7 @@ func (a *appCore) CreateSkillDir(ref domain.SkillVersionRef, rel string) error {
 	if err != nil {
 		return userErr(err)
 	}
-	return userErr(skillrepo.MkdirIn(root, rel))
+	return a.commitScanChange(skillrepo.MkdirIn(root, rel))
 }
 
 // GetSkillI18n returns language-version metadata for a skill.
@@ -930,6 +971,7 @@ func (a *appCore) SetSkillDefaultLanguage(id, language string) error {
 	if err := a.i18n().SetDefault(id, language, hubPath); err != nil {
 		return userErr(err)
 	}
+	a.invalidateScan()
 	// Hub path is unchanged; existing tool links still point at the same directory.
 	return nil
 }
@@ -1154,9 +1196,9 @@ func (a *appCore) SetSkillLink(skillID, toolID string, enabled bool) error {
 			}
 			return userErr(err)
 		}
-		return userErr(linker.EnsureSymlink(linkPath, hubPath))
+		return a.commitScanChange(linker.EnsureSymlink(linkPath, hubPath))
 	}
-	return userErr(linker.RemoveSymlink(linkPath))
+	return a.commitScanChange(linker.RemoveSymlink(linkPath))
 }
 
 // GetLinkSnapshot returns the saved link snapshot for a tool, or (nil, nil) if none.
@@ -1185,6 +1227,7 @@ func (a *appCore) DisableAllSkillLinks(toolIDs []string) (domain.BulkLinkResult,
 	if err != nil {
 		return domain.BulkLinkResult{}, userErr(err)
 	}
+	a.invalidateScan()
 	path := a.settingsPath
 	if path == "" {
 		p, err := config.DefaultSettingsPath()
@@ -1213,6 +1256,7 @@ func (a *appCore) EnableSkillLinks(toolIDs []string, mode string) (domain.BulkLi
 	if err != nil {
 		return domain.BulkLinkResult{}, userErr(err)
 	}
+	a.invalidateScan()
 	return res, nil
 }
 
@@ -1235,6 +1279,7 @@ func (a *appCore) ApplyConflictRound(skillID string) (domain.OrganizePlan, error
 		return domain.OrganizePlan{}, userErr(err)
 	}
 	a.purgeTrash()
+	a.invalidateScan()
 	return plan, nil
 }
 
@@ -1282,6 +1327,7 @@ func (a *appCore) ExecuteOrganize() (domain.OrganizeReport, error) {
 	} else {
 		applog.Error("organize fail", "jobId", jobID, "err", err)
 	}
+	a.invalidateScan()
 	return report, userErr(err)
 }
 
@@ -1302,6 +1348,7 @@ func (a *appCore) ConfirmAddWorkdirs(paths []string) (domain.AddWorkdirsResult, 
 		return domain.AddWorkdirsResult{}, userErr(err)
 	}
 	if len(res.Added) > 0 {
+		a.invalidateScan()
 		if err := a.persistSettings(); err != nil {
 			return res, userErr(fmt.Errorf("保存配置失败: %w", err))
 		}
@@ -1337,6 +1384,7 @@ func (a *appCore) RestoreOrphanLinks(linkPaths []string) (domain.RestoreOrphanRe
 	if err != nil {
 		return domain.RestoreOrphanReport{}, userErr(err)
 	}
+	a.invalidateScan()
 	if len(report.Succeeded) > 0 {
 		a.purgeTrash()
 	}
@@ -1359,8 +1407,137 @@ func (a *appCore) RequestElevation() error {
 	return nil
 }
 
+func (a *appCore) invalidateScan() {
+	a.scanMu.Lock()
+	a.scanGen++
+	a.scanCache = nil
+	a.scanMu.Unlock()
+}
+
+func (a *appCore) commitScanChange(err error) error {
+	if err != nil {
+		return userErr(err)
+	}
+	a.invalidateScan()
+	return nil
+}
+
+func scanCacheKey(cfg config.Config) string {
+	var b strings.Builder
+	b.WriteString(filepath.Clean(cfg.HubPath))
+	type toolKey struct{ id, path string }
+	tools := make([]toolKey, 0, len(cfg.Tools))
+	for _, t := range cfg.Tools {
+		if !t.Enabled || strings.TrimSpace(t.Path) == "" {
+			continue
+		}
+		tools = append(tools, toolKey{t.ID, t.Path})
+	}
+	sort.Slice(tools, func(i, j int) bool {
+		if tools[i].id != tools[j].id {
+			return tools[i].id < tools[j].id
+		}
+		return tools[i].path < tools[j].path
+	})
+	for _, t := range tools {
+		b.WriteByte(0)
+		b.WriteString(t.id)
+		b.WriteByte(0)
+		b.WriteString(t.path)
+	}
+	return b.String()
+}
+
+func cloneSkillEntries(entries []domain.SkillEntry) []domain.SkillEntry {
+	if entries == nil {
+		return nil
+	}
+	out := make([]domain.SkillEntry, len(entries))
+	copy(out, entries)
+	for i := range out {
+		if out[i].Locations != nil {
+			locs := make([]domain.SkillLocation, len(out[i].Locations))
+			copy(locs, out[i].Locations)
+			out[i].Locations = locs
+		}
+	}
+	return out
+}
+
+func (a *appCore) now() time.Time {
+	if a.nowFn != nil {
+		return a.nowFn()
+	}
+	return time.Now()
+}
+
+func (a *appCore) doScan(cfg config.Config) ([]domain.SkillEntry, error) {
+	if a.scanFn != nil {
+		return a.scanFn(cfg)
+	}
+	return scanner.Scan(cfg)
+}
+
+func (a *appCore) releaseInflight(ch chan struct{}) {
+	a.scanMu.Lock()
+	defer a.scanMu.Unlock()
+	if a.scanInflight == ch {
+		a.scanInflight = nil
+		close(ch)
+	}
+}
+
+func (a *appCore) doScanLocked(key string, gen uint64, ch chan struct{}) (entries []domain.SkillEntry, err error, retry bool) {
+	defer a.releaseInflight(ch)
+	raw, err := a.doScan(a.cfg)
+	a.scanMu.Lock()
+	retry = a.scanGen != gen
+	if err == nil && !retry {
+		a.scanCache = &scanSnapshot{
+			key:     key,
+			entries: cloneSkillEntries(raw),
+			at:      a.now(),
+		}
+	}
+	a.scanMu.Unlock()
+	if retry {
+		return nil, nil, true
+	}
+	if err != nil {
+		return nil, err, false
+	}
+	return cloneSkillEntries(raw), nil, false
+}
+
 func (a *appCore) listMerged() ([]domain.SkillEntry, error) {
-	return scanner.Scan(a.cfg)
+	for {
+		key := scanCacheKey(a.cfg)
+		a.scanMu.Lock()
+		if a.scanCache != nil && a.scanCache.key == key && a.now().Sub(a.scanCache.at) < scanCacheTTL {
+			out := cloneSkillEntries(a.scanCache.entries)
+			a.scanMu.Unlock()
+			return out, nil
+		}
+		if a.scanInflight != nil {
+			ch := a.scanInflight
+			a.scanMu.Unlock()
+			<-ch
+			continue
+		}
+		ch := make(chan struct{})
+		a.scanInflight = ch
+		gen := a.scanGen
+		a.scanMu.Unlock()
+
+		entries, err, retry := a.doScanLocked(key, gen, ch)
+		if retry {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		return entries, nil
+	}
 }
 
 func findTool(cfg config.Config, toolID string) (config.ToolMapping, bool) {

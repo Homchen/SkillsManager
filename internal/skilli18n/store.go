@@ -117,23 +117,62 @@ func (s *Store) Save(id string, meta Metadata) error {
 	return os.Rename(tmp, s.MetaPath(id))
 }
 
-// Info returns UI-facing language info, reconciling metadata with on-disk versions.
-func (s *Store) Info(id string) (Info, error) {
-	meta, err := s.Reconcile(id)
-	if err != nil {
-		return Info{}, err
-	}
+func infoFromMeta(meta Metadata) Info {
 	count := 0
 	for _, lang := range meta.Languages {
 		if lang != "" && lang != meta.DefaultLanguage {
 			count++
 		}
 	}
+	langs := meta.Languages
+	if langs == nil {
+		langs = []string{}
+	} else {
+		langs = append([]string{}, langs...)
+	}
 	return Info{
 		DefaultLanguage:  meta.DefaultLanguage,
-		Languages:        append([]string{}, meta.Languages...),
+		Languages:        langs,
 		TranslationCount: count,
-	}, nil
+	}
+}
+
+// Info returns UI-facing language info, reconciling metadata with on-disk versions.
+func (s *Store) Info(id string) (Info, error) {
+	meta, err := s.Reconcile(id)
+	if err != nil {
+		return Info{}, err
+	}
+	return infoFromMeta(meta), nil
+}
+
+// ListInfo reads metadata.json for every skill under the translation root.
+// It does not walk version directories or write metadata (unlike Info/Reconcile).
+func (s *Store) ListInfo() (map[string]Info, error) {
+	ents, err := os.ReadDir(s.Root())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]Info{}, nil
+		}
+		return nil, err
+	}
+	out := make(map[string]Info, len(ents))
+	for _, e := range ents {
+		if !e.IsDir() || fsutil.ShouldSkipDir(e.Name()) {
+			continue
+		}
+		id := fsutil.NormalizeSkillID(e.Name())
+		if id == "" {
+			continue
+		}
+		meta, err := s.Load(id)
+		if err != nil {
+			// One corrupt metadata.json must not hide the rest of the list.
+			continue
+		}
+		out[id] = infoFromMeta(meta)
+	}
+	return out, nil
 }
 
 // Reconcile loads metadata and adds any on-disk version directories that are missing.

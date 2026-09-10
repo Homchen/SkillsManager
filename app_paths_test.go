@@ -217,7 +217,7 @@ func TestMigrateRootSkillsAndRelinkUnelevatedKeepsLinkedRootSkill(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	err := migrateRootSkillsAndRelink(cfg, skillrepo.New(hub, trash.New(hub)), false)
+	_, err := migrateRootSkillsAndRelink(cfg, skillrepo.New(hub, trash.New(hub)), false)
 	if err == nil || !strings.Contains(err.Error(), errNeedAdmin) {
 		t.Fatalf("expected errNeedAdmin, got %v", err)
 	}
@@ -233,7 +233,7 @@ func TestMigrateRootSkillsAndRelinkUnelevatedKeepsLinkedRootSkill(t *testing.T) 
 func TestMigrateRootSkillsAndRelinkUnelevatedMigratesUnlinkedRootSkill(t *testing.T) {
 	cfg, hub, skillDir, _ := setupRootSkillAndTool(t)
 
-	if err := migrateRootSkillsAndRelink(cfg, skillrepo.New(hub, trash.New(hub)), false); err != nil {
+	if _, err := migrateRootSkillsAndRelink(cfg, skillrepo.New(hub, trash.New(hub)), false); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(skillDir, "SKILL.md")); !os.IsNotExist(err) {
@@ -251,7 +251,7 @@ func TestMigrateRootSkillsAndRelinkElevatedMovesAndRelinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := migrateRootSkillsAndRelink(cfg, skillrepo.New(hub, trash.New(hub)), true); err != nil {
+	if _, err := migrateRootSkillsAndRelink(cfg, skillrepo.New(hub, trash.New(hub)), true); err != nil {
 		t.Fatal(err)
 	}
 	newSkill := filepath.Join(hub, "default", "foo")

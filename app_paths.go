@@ -31,10 +31,10 @@ func isNeedAdminErr(err error) bool {
 // migrateRootSkillsAndRelink moves hub-root skills into default/.
 // Skills with tool symlinks are not renamed unless elevated; that case
 // returns errNeedAdmin so the caller can surface it without breaking links.
-func migrateRootSkillsAndRelink(cfg config.Config, r *skillrepo.Repo, elevated bool) error {
+func migrateRootSkillsAndRelink(cfg config.Config, r *skillrepo.Repo, elevated bool) (moved bool, err error) {
 	ids, err := r.ListRootSkillIDs()
 	if err != nil {
-		return err
+		return false, err
 	}
 	var skippedLinked bool
 	for _, id := range ids {
@@ -42,28 +42,29 @@ func migrateRootSkillsAndRelink(cfg config.Config, r *skillrepo.Repo, elevated b
 			skippedLinked = true
 			continue
 		}
-		destID, moved, err := r.MigrateRootSkillToDefault(id)
-			if err != nil {
-				return err
+		destID, didMove, err := r.MigrateRootSkillToDefault(id)
+		if err != nil {
+			return moved, err
+		}
+		if !didMove {
+			continue
+		}
+		moved = true
+		newPath := filepath.Join(r.Hub, domain.DefaultGroup, destID)
+		if destID != id {
+			if err := relinkSkillAfterRename(cfg, id, destID, newPath, elevated); err != nil {
+				return moved, err
 			}
-			if !moved {
-				continue
-			}
-			newPath := filepath.Join(r.Hub, domain.DefaultGroup, destID)
-			if destID != id {
-				if err := relinkSkillAfterRename(cfg, id, destID, newPath, elevated); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := relinkSkillHubTarget(cfg, id, newPath, elevated); err != nil {
-				return err
-			}
+			continue
+		}
+		if err := relinkSkillHubTarget(cfg, id, newPath, elevated); err != nil {
+			return moved, err
+		}
 	}
 	if skippedLinked {
-		return fmt.Errorf("%s", errNeedAdmin)
+		return moved, fmt.Errorf("%s", errNeedAdmin)
 	}
-	return nil
+	return moved, nil
 }
 
 func unlinkSkillToolLinks(cfg config.Config, skillID string) error {

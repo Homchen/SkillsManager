@@ -42,6 +42,102 @@ func TestTranslationRoot(t *testing.T) {
 	}
 }
 
+func TestListInfoSkipsMissingTranslationRoot(t *testing.T) {
+	s := New(filepath.Join(t.TempDir(), "skills"))
+	got, err := s.ListInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ListInfo = %#v, want empty", got)
+	}
+}
+
+func TestListInfoDoesNotReconcileOrSave(t *testing.T) {
+	hub := t.TempDir()
+	s := New(hub)
+	id := "demo"
+	if err := s.InitDefault(id, "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	metaPath := s.MetaPath(id)
+	before, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	en := s.VersionPath(id, "en")
+	if err := os.MkdirAll(en, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(en, "SKILL.md"), []byte("---\nname: demo\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, ok := got[id]
+	if !ok {
+		t.Fatal("ListInfo missing demo")
+	}
+	if info.DefaultLanguage != "zh-CN" {
+		t.Fatalf("default = %q, want zh-CN", info.DefaultLanguage)
+	}
+	if info.TranslationCount != 0 {
+		t.Fatalf("ListInfo TranslationCount = %d, want 0 (metadata only)", info.TranslationCount)
+	}
+	if info.Languages == nil {
+		t.Fatal("Languages is nil")
+	}
+	after, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatalf("ListInfo wrote metadata:\n%s", after)
+	}
+
+	reconciled, err := s.Info(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reconciled.TranslationCount != 1 {
+		t.Fatalf("Info TranslationCount = %d, want 1 after Reconcile", reconciled.TranslationCount)
+	}
+}
+
+func TestListInfoSkipsCorruptMetadata(t *testing.T) {
+	hub := t.TempDir()
+	s := New(hub)
+	if err := s.InitDefault("demo", "zh-CN"); err != nil {
+		t.Fatal(err)
+	}
+	bad := s.SkillDir("broken")
+	if err := os.MkdirAll(bad, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.MetaPath("broken"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListInfo()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["broken"]; ok {
+		t.Fatal("ListInfo should skip corrupt metadata")
+	}
+	info, ok := got["demo"]
+	if !ok {
+		t.Fatal("ListInfo missing demo after skipping corrupt sibling")
+	}
+	if info.DefaultLanguage != "zh-CN" {
+		t.Fatalf("demo default = %q, want zh-CN", info.DefaultLanguage)
+	}
+}
+
 func TestInitDefaultAndAddTranslation(t *testing.T) {
 	hub := t.TempDir()
 	s := New(hub)
