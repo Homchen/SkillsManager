@@ -44,7 +44,7 @@ function badge(
 
 /**
  * Visual identity for a tool card. Matching is token-based so "codex" is never
- * treated as VS Code just because it contains the letters "code".
+ * confused with a generic "code" id just because it contains the letters "code".
  */
 export function getToolBadge(id: string): ToolBadge {
   const norm = normalizeToolId(id)
@@ -58,17 +58,10 @@ export function getToolBadge(id: string): ToolBadge {
     })
   }
   if (idMatches(norm, 'claude')) {
-    return badge('Claude', 'C', {
+    return badge('Claude Code', 'C', {
       gradient: 'linear-gradient(135deg, #d97706 0%, #f97316 100%)',
       shadowColor: 'rgba(234, 88, 12, 0.28)',
       accentColor: '#ea580c',
-    })
-  }
-  if (idMatches(norm, 'windsurf')) {
-    return badge('Windsurf', 'W', {
-      gradient: 'linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)',
-      shadowColor: 'rgba(2, 132, 199, 0.28)',
-      accentColor: '#0284c7',
     })
   }
   if (idMatches(norm, 'opencode')) {
@@ -90,15 +83,6 @@ export function getToolBadge(id: string): ToolBadge {
       gradient: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
       shadowColor: 'rgba(124, 58, 237, 0.28)',
       accentColor: '#7c3aed',
-    })
-  }
-  // Exact "code" / "vscode" / "vs-code" only — never substring-match "code"
-  // (that would mislabel Codex / OpenCode / Roo).
-  if (norm === 'code' || idMatches(norm, 'vscode', 'vs-code')) {
-    return badge('VS Code', 'V', {
-      gradient: 'linear-gradient(135deg, #0066b8 0%, #007acc 100%)',
-      shadowColor: 'rgba(0, 122, 204, 0.28)',
-      accentColor: '#007acc',
     })
   }
   if (idMatches(norm, 'cline', 'roo')) {

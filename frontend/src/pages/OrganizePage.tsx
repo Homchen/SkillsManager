@@ -1080,7 +1080,7 @@ export default function OrganizePage({onBack}: Props) {
           </div>
           <h3 className="organize-hero-title">将散落的 Skills 统一归集至唯一源仓</h3>
           <p className="organize-hero-desc">
-            当您同时使用 Cursor、Claude、VS Code、Windsurf 等多个开发工具时，技能文件往往分散多处且容易版本脱节。一键整理能安全将所有技能集中管理，并透明建立系统级符号链接。
+            当您同时使用 Cursor、Claude Code、Codex、OpenCode 等多个 Agent 编程工具时，技能文件往往分散多处且容易版本脱节。一键整理能安全将所有技能集中管理，并透明建立系统级符号链接。
           </p>
 
           <div className="organize-hero-pillars">

@@ -32,12 +32,12 @@ After install, the user home directory looks roughly like this:
 | Path (relative to `$HOME` / `%USERPROFILE%`) | Role |
 | --- | --- |
 | `target.hooksJson` (e.g. `.cursor/hooks.json` / `.codex/hooks.json`) | Cursor-style target: merge managed hook entries |
-| `target.managedDir` (e.g. `.cursor/hooks/skillsmanager/<agentId>`) | Cursor / Claude-style target: copied scripts |
+| `target.managedDir` (e.g. `.cursor/hooks/skillsmanager/<agentId>`) | Cursor / Claude Code-style target: copied scripts |
 | `target.settingsJson` (e.g. `.claude/settings.json`) | Claude Code target: merge managed hooks, keep `env` and other fields |
 | `target.pluginFile` (e.g. `.config/opencode/plugins/skillsmanager-opencode.js`) | OpenCode plugin target: one managed plugin file |
 | `.skillsmanager/hooks-state.json` | Installed Agent list (used by uninstall) |
 
-Cursor / Claude managed entries are identified by the `hooks/skillsmanager/<agentId>` prefix in the command. Install strips old managed entries then merges; uninstall deletes only managed entries and `managedDir`, and does not touch the user’s own hooks. Claude Code commands use a machine-absolute path (`{{managedDir}}` in the manifest, expanded at install time). OpenCode uses a separately named plugin file: install overwrites that file, uninstall deletes only that file, and does not read or write `opencode.json` or user plugins.
+Cursor / Claude Code managed entries are identified by the `hooks/skillsmanager/<agentId>` prefix in the command. Install strips old managed entries then merges; uninstall deletes only managed entries and `managedDir`, and does not touch the user’s own hooks. Claude Code commands use a machine-absolute path (`{{managedDir}}` in the manifest, expanded at install time). OpenCode uses a separately named plugin file: install overwrites that file, uninstall deletes only that file, and does not read or write `opencode.json` or user plugins.
 
 ## `manifest.json` fields
 
@@ -57,12 +57,12 @@ Each Agent:
 | `defaultSelected` | no | Reserved for installer default-checked |
 | `requires` | no | Dependency list; if it includes `node` and node is not on PATH, skip install (exit `2`) |
 | `target.hooksJson` | required for Cursor / Codex targets | Hooks config file relative to the user home directory |
-| `target.managedDir` | required for Cursor / Claude / Codex targets | Script destination relative to the user home directory |
-| `target.settingsJson` | required for Claude target | Claude Code `settings.json` relative to the user home directory |
+| `target.managedDir` | required for Cursor / Claude Code / Codex targets | Script destination relative to the user home directory |
+| `target.settingsJson` | required for Claude Code target | Claude Code `settings.json` relative to the user home directory |
 | `target.type` | no | `opencode-plugin` / `claude-settings` / `codex-hooks-json`; omit for existing Cursor style |
 | `target.pluginFile` | required for OpenCode target | Managed plugin file relative to the user home directory |
 | `files` | yes | File names copied from `hooks/<id>/` into `managedDir` (or the plugin parent directory) |
-| `hooks` | required for Cursor / Claude / Codex | Event → entry list written into config |
+| `hooks` | required for Cursor / Claude Code / Codex | Event → entry list written into config |
 
 `hooks` entries (Cursor-style target):
 
@@ -142,7 +142,7 @@ Claude Code target (`target.type: "claude-settings"`) example:
 }
 ```
 
-Claude target notes:
+Claude Code target notes:
 
 - Claude Code uses a nested shape: event → matcher group → `hooks[]` (with `type` / `command` / `timeout`), unlike Cursor’s flat entries.
 - `command` must be a local absolute path. The manifest uses `{{managedDir}}`; install expands it to a POSIX-style absolute path (for example `C:/Users/.../.claude/hooks/skillsmanager/claude`).
@@ -229,7 +229,7 @@ Hard rules:
 
 - Read the Agent JSON payload from stdin or argv; exit silently if parsing fails.
 - On business failure, write stderr only. Do not block the Agent’s main flow because of stats.
-- Follow each target’s stdout rules above for Cursor / Claude / Codex.
+- Follow each target’s stdout rules above for Cursor / Claude Code / Codex.
 
 ### 2. Register in the manifest
 

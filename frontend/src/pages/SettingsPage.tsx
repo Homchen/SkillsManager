@@ -1076,7 +1076,7 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                     <div>
                       <h3 className="settings-card-title">已挂载的 Agent 工具</h3>
                       <p className="settings-card-desc">
-                        配置 Cursor、Claude、Windsurf 等开发工具的技能存储目录。源仓整理时将把其中的技能软链挂载到此处。
+                        配置 Cursor、Claude Code、Codex 等 Agent 编程工具的技能存储目录。源仓整理时将把其中的技能软链挂载到此处。
                       </p>
                     </div>
                   </div>
@@ -1287,7 +1287,7 @@ const SettingsPage = forwardRef<SettingsPageHandle, Props>(function SettingsPage
                                     className="settings-text-input"
                                     value={tool.id}
                                     onChange={(e) => updateTool(index, {id: e.target.value})}
-                                    placeholder="例如 cursor, claude, windsurf, opencode"
+                                    placeholder="例如 cursor, claude, opencode, codex"
                                     autoFocus
                                   />
                                 </label>

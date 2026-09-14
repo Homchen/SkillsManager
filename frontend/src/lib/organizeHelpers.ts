@@ -188,10 +188,8 @@ export function detectToolFromPath(sourcePath: string): DetectedTool | null {
   if (!sourcePath) return null
   const norm = sourcePath.toLowerCase().replace(/\\/g, '/')
   if (norm.includes('.cursor/') || norm.includes('/cursor/')) return {id: 'cursor', name: 'Cursor'}
-  if (norm.includes('.claude/') || norm.includes('/claude/')) return {id: 'claude', name: 'Claude'}
-  if (norm.includes('.windsurf/') || norm.includes('/windsurf/')) return {id: 'windsurf', name: 'Windsurf'}
+  if (norm.includes('.claude/') || norm.includes('/claude/')) return {id: 'claude', name: 'Claude Code'}
   if (norm.includes('.trae/') || norm.includes('/trae/')) return {id: 'trae', name: 'Trae'}
-  if (norm.includes('.vscode/') || norm.includes('/vscode/') || norm.includes('code/user/skills')) return {id: 'vscode', name: 'VS Code'}
   if (norm.includes('.cline/') || norm.includes('/cline/')) return {id: 'cline', name: 'Cline'}
   if (norm.includes('.roo/') || norm.includes('/roo/')) return {id: 'roo', name: 'Roo'}
   if (norm.includes('.agents/') || norm.includes('/agents/')) return {id: 'agents', name: 'Agents'}

@@ -89,7 +89,7 @@ Any language is fine. If the same JSON is written, the app can read it.
 
 - Never block the Agent: exit silently on parse failure; write stderr only on business failure.
 - Do not assume SkillsManager is running.
-- If that Agent injects hook stdout into the model context (Claude `UserPromptExpansion`, for example), stdout must be empty.
+- If that Agent injects hook stdout into the model context (Claude Code `UserPromptExpansion`, for example), stdout must be empty.
 - Do not put the substring `hooks/skillsmanager/<id>` in the command. That is how this product’s installer recognizes **official managed entries**; using it can make an official uninstall remove your hook.
 
 **Suggested:**

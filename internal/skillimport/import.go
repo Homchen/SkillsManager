@@ -116,7 +116,7 @@ const (
 )
 
 // isZipSkillPackage reports whether path is a zip-based skill archive
-// (.zip export pack or Claude/Cursor .skill package).
+// (.zip export pack or Claude Code/Cursor .skill package).
 func isZipSkillPackage(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	return ext == ".zip" || ext == ".skill"

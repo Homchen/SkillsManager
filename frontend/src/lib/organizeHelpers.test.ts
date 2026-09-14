@@ -354,10 +354,7 @@ describe('filterActionSectionsByQuery', () => {
 describe('detectToolFromPath', () => {
   it('identifies tools from path patterns', () => {
     expect(detectToolFromPath('C:\\Users\\admin\\.cursor\\skills\\foo')?.id).toBe('cursor')
-    expect(detectToolFromPath('/home/user/.claude/skills/bar')?.id).toBe('claude')
-    expect(detectToolFromPath('D:/repo/.vscode/skills/baz')?.id).toBe('vscode')
-    expect(detectToolFromPath('/app/code/user/skills/qux')?.id).toBe('vscode')
-    expect(detectToolFromPath('/home/.windsurf/skills/test')?.id).toBe('windsurf')
+    expect(detectToolFromPath('/home/user/.claude/skills/bar')).toEqual({id: 'claude', name: 'Claude Code'})
     expect(detectToolFromPath('C:\\.trae\\skills\\my')?.id).toBe('trae')
     expect(detectToolFromPath('/unknown/path/custom/skill')).toBeNull()
     expect(detectToolFromPath('')).toBeNull()

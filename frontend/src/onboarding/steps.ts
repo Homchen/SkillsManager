@@ -205,7 +205,7 @@ export function onboardingCopy(step: OnboardingStep): OnboardingCopy {
     case 'settings':
       return {
         title: '先打开设置',
-        body: '首次使用先确认源仓路径，并挂上 Cursor、Claude 等工具目录。',
+        body: '首次使用先确认源仓路径，并挂上 Cursor、Claude Code 等工具目录。',
       }
     case 'hub':
       return {

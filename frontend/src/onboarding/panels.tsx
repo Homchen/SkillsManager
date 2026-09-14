@@ -222,7 +222,7 @@ export function DemoOrganize({
           </div>
           <h3 className="organize-hero-title">将散落的 Skills 统一归集至唯一源仓</h3>
           <p className="organize-hero-desc">
-            当您同时使用 Cursor、Claude、VS Code、Windsurf 等多个开发工具时，技能文件往往分散多处且容易版本脱节。一键整理能安全将所有技能集中管理，并透明建立系统级符号链接。
+            当您同时使用 Cursor、Claude Code、Codex、OpenCode 等多个 Agent 编程工具时，技能文件往往分散多处且容易版本脱节。一键整理能安全将所有技能集中管理，并透明建立系统级符号链接。
           </p>
           <div className="organize-hero-pillars">
             <div className="organize-hero-pillar">
@@ -712,7 +712,7 @@ export function DemoSettings({tab}: {tab: 'general' | 'tools'}) {
                     <div>
                       <h3 className="settings-card-title">已挂载的 Agent 工具</h3>
                       <p className="settings-card-desc">
-                        配置 Cursor、Claude、Windsurf 等开发工具的技能存储目录。
+                        配置 Cursor、Claude Code、Codex 等 Agent 编程工具的技能存储目录。
                       </p>
                     </div>
                   </div>

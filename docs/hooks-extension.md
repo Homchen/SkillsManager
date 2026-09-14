@@ -89,7 +89,7 @@ Agent 事件（读 SKILL.md / Skill 工具 / /skill）
 
 - 失败不得阻断 Agent：解析失败就静默退出；业务失败只写 stderr。
 - 不要假设 SkillsManager 正在运行。
-- 若该 Agent 会把 hook 的 stdout 塞进模型上下文（如 Claude 的 `UserPromptExpansion`），stdout 必须为空。
+- 若该 Agent 会把 hook 的 stdout 塞进模型上下文（如 Claude Code 的 `UserPromptExpansion`），stdout 必须为空。
 - 不要使用命令子串 `hooks/skillsmanager/<id>`。那是本产品安装器识别**官方托管条目**的标记；用了之后，官方卸载可能把你的 hook 一起拆掉。
 
 **建议：**
