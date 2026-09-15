@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-15
+
+主界面重构，并改进技能列表、整理流程与新手引导。
+
 ### Added
 
 - 未提权时，仍位于源仓根目录且已有工具链接的技能会出现在列表中，并提示以管理员身份重启以迁入默认分组；可选择本次跳过，技能仍可查看和编辑，卡片会标「待迁移」
@@ -46,5 +50,6 @@
 - 可选 Agent hook，统计技能被读取或斜杠调用的次数
 - 回收站与保留期内恢复
 
-[Unreleased]: https://github.com/Homchen/SkillsManager/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Homchen/SkillsManager/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Homchen/SkillsManager/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Homchen/SkillsManager/releases/tag/v1.0.0
